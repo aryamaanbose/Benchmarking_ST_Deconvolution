@@ -1,0 +1,365 @@
+---
+title: "Process scRNA-seq"
+output: html_notebook
+---
+##Location of script
+```{r}
+here::i_am("Code/Preprocess_scRNA.Rmd")
+```
+##Download Data
+We import the scRNA data from (Tepe et al, 2018),
+Under accession number GSE121891
+We have two sets of meta_data.
+With two levels of annotation 
+We use the annotation the same as the CARD paper 
+```{r}
+MOBSC_sce_raw <- read.csv(gzfile(here("Data/scrna_mob/Raw","GSE121891_OB_6_runs.raw.dge.csv.gz")))
+
+meta_data <- read.csv(gzfile(here("Data/scrna_mob/Meta","GSE121891_OB_metaData_seurat.csv.gz")))
+
+meta_data2 <- read.csv(here("Data/scrna_mob/Meta", "GSE121891_Figure_2_metadata.txt"), sep = "\t")
+
+MOBSC_sce <- readRDS((url("https://figshare.com/ndownloader/files/40581983")))
+
+```
+##Create Seurat Object 
+###Add Metadata 
+```{r}
+rownames(MOBSC_sce_raw) <- MOBSC_sce_raw[[1]]  # Set the first column as row names
+
+
+seurat_object1 <- CreateSeuratObject(counts = MOBSC_sce_raw)
+
+
+
+seurat_object2 <- as.Seurat(MOBSC_sce) ## 182 genes 
+
+
+seurat_object1 <- subset(seurat_object1, cells = colnames(seurat_object2))
+
+# Extract cell names from both objects
+cellnames_object1 <- rownames(seurat_object1@meta.data)
+cellnames_object2 <- rownames(seurat_object2@meta.data)
+
+# Check if the cell names match (you can use set operations to find mismatches)
+mismatched_cells <- setdiff(cellnames_object1, cellnames_object2)
+
+celltypes_data <- seurat_object2@meta.data$cell_type
+
+# Add the 'celltypes' column to seurat_object1's metadata
+seurat_object1@meta.data$celltypes <- celltypes_data[match(cellnames_object1, cellnames_object2)]
+
+# Add FinalIds to meta_data
+seurat_object1@meta.data$celltypes2 <- meta_data2$FinalIds[match(rownames(seurat_object1@meta.data), rownames(meta_data2))]
+
+# Add ClusterName column to seurat_object1's metadata
+##After subset only neuronal cell types are selected 
+seurat_object1@meta.data$celltypes3 <- meta_data$ClusterName[match(rownames(seurat_object1@meta.data), meta_data$X)]
+```
+##Preprocessing 
+```{r}
+genes_to_exclude <- c("Malat1",mt_genes)
+
+# Invert the exclusion to get a list of genes to keep
+genes_to_keep <- setdiff(rownames(seurat_object1), genes_to_exclude)
+
+# Subset the Seurat object to keep only the desired genes
+seurat_object1 <- subset(seurat_object1, features = genes_to_keep)
+
+seurat_object1[["percent.mt"]] <- PercentageFeatureSet(seurat_object1, pattern = "^mt-")
+
+seurat_object1<- subset(seurat_object1, subset = nFeature_RNA > 200 & percent.mt < 60)
+
+##Filtering for genes with expression above zero, rowsums of counts data should be above zero 
+genes_with_expression <- rownames(seurat_object1)[rowSums(GetAssayData(seurat_object1, slot = "counts")) > 0]
+
+seurat_object1 <- subset(seurat_object1, features = genes_with_expression)
+
+
+###Normalize and scale####
+seurat_object1 <- NormalizeData(seurat_object1, normalization.method = "LogNormalize", scale.factor = 10000)
+
+seurat_object1 <- ScaleData(seurat_object1, features = rownames(seurat_object1))
+# Run PCA
+seurat_object1 <- FindVariableFeatures(seurat_object1, selection.method = "vst", nfeatures = 2000)
+#
+top10 <- head(VariableFeatures(seurat_object1, ),10)
+
+plot1 <- VariableFeaturePlot(seurat_object1)
+LabelPoints(plot = plot1, points = top10, repel = TRUE, xnudge = 0, ynudge = 0)
+
+# Run PCA
+seurat_object1 <- RunPCA(seurat_object1, features = VariableFeatures(object = seurat_object1))
+```
+##EDA
+```{r}
+seurat_object1 <- RunUMAP(seurat_object1 , dims = 1:15)
+ ##Celltypes 2 contains higher level of cell type annotations
+p1 <- DimPlot(seurat_object1 , group.by = "celltypes2", label = TRUE, reduction = "umap" )
+p2 <- DimPlot(seurat_object1, group.by = "celltypes",label = TRUE, reduction = "umap"  )
+p1 + p2 
+
+```
+##Subset scRNA and ST
+(Run Preprocess_ST.Rmd first)
+```{r}
+seurat_object1 <- subset(seurat_object1, features = rownames(spe))
+```
+##Create Filtered Gene Sets
+###No Ribosomal Genes
+```{r}
+Rp_genes <- grep("^Rp", rownames(seurat_object1), value = TRUE)
+genes_to_exclude <- c(Rp_genes)
+genes_to_keep <- setdiff(rownames(seurat_object1), genes_to_exclude)
+seurat_object1_norp <- subset(seurat_object1,features = genes_to_keep)
+```
+###No platform bias genes
+(Run Platform_bias.R first)
+```{r}
+significantly_diff_genes 
+genes_to_keep <- setdiff(rownames(seurat_object1), significantly_diff_genes)
+seurat_object1_sig_diff <- subset(seurat_object1,features = genes_to_keep)
+```
+##Function for finding marker genes
+```{r}
+get_top_markers <- function(markers_all, total_genes) {
+  # Calculate the number of genes per cell type
+  genes_per_type <- total_genes %/% 4
+  
+  # Filter and sort markers for each cell type
+  sorted_markers_GC <- markers_all %>%
+    filter(cluster == 'GC', avg_log2FC >= 0) %>%
+    arrange(p_val_adj) %>%
+    head(genes_per_type)
+  
+  sorted_markers_PGC <- markers_all %>%
+    filter(cluster == 'PGC', avg_log2FC >= 0) %>%
+    arrange(p_val_adj) %>%
+    head(genes_per_type)
+  
+  sorted_markers_OSNS <- markers_all %>%
+    filter(cluster == 'OSNs', avg_log2FC >= 0) %>%
+    arrange(p_val_adj) %>%
+    head(genes_per_type)
+  
+  sorted_markers_MTC <- markers_all %>%
+    filter(cluster == 'M/TC', avg_log2FC >= 0) %>%
+    arrange(p_val_adj) %>%
+    head(genes_per_type)
+  
+  # Extract gene names
+  genes_GC <- rownames(sorted_markers_GC)
+  print(length(genes_GC))
+  genes_PGC <- rownames(sorted_markers_PGC)
+  print(length(genes_PGC))
+  genes_OSNS <- rownames(sorted_markers_OSNS)
+  print(length(genes_OSNS))
+  genes_MTC <- rownames(sorted_markers_MTC)
+  print(length(genes_MTC))
+  
+  # Combine all top markers into one list
+  print(Reduce(intersect, list(genes_GC, genes_PGC, genes_OSNS, genes_MTC)))
+  deg <- unique(c(genes_GC, genes_PGC, genes_OSNS, genes_MTC))
+  
+  # Return the result
+  return(deg)
+}
+```
+##Function for finding marker genes with cutoff
+```{r}
+get_top_markersFC_cutoff <- function(markers_all, total_genes, cutoff = 1.5) {
+  # Calculate the number of genes per cell type
+  genes_per_type <- total_genes %/% 4
+  
+  # Filter and sort markers for each cell type
+  sorted_markers_GC <- markers_all %>%
+    filter(cluster == 'GC', avg_log2FC >= cutoff) %>%
+    arrange(p_val_adj) %>%
+    head(genes_per_type)
+  
+  sorted_markers_PGC <- markers_all %>%
+    filter(cluster == 'PGC', avg_log2FC >= cutoff) %>%
+    arrange(p_val_adj) %>%
+    head(genes_per_type)
+  
+  sorted_markers_OSNS <- markers_all %>%
+    filter(cluster == 'OSNs', avg_log2FC >= cutoff) %>%
+    arrange(p_val_adj) %>%
+    head(genes_per_type)
+  
+  sorted_markers_MTC <- markers_all %>%
+    filter(cluster == 'M/TC', avg_log2FC >= cutoff) %>%
+    arrange(p_val_adj) %>%
+    head(genes_per_type)
+
+  
+  # Extract gene names
+  genes_GC <- rownames(sorted_markers_GC)
+  print(length(genes_GC))
+  genes_PGC <- rownames(sorted_markers_PGC)
+  print(length(genes_PGC))
+  genes_OSNS <- rownames(sorted_markers_OSNS)
+  print(length(genes_OSNS))
+  genes_MTC <- rownames(sorted_markers_MTC)
+  print(length(genes_MTC))
+  
+  # Combine all top markers into one list
+  print(Reduce(intersect, list(genes_GC, genes_PGC, genes_OSNS, genes_MTC)))
+  deg <- unique(c(genes_GC, genes_PGC, genes_OSNS, genes_MTC))
+  
+  
+  markers <- markers_all[markers_all$cluster == 'GC', ]
+  markersPGC <- markers_all[markers_all$cluster == 'PGC', ]
+  markersOSNS <- markers_all[markers_all$cluster == 'OSNs', ]
+  markersMTC <- markers_all[markers_all$cluster == 'M/TC', ]
+  
+  create_volcano_plot <- function(data, log2fc_cutoff, pval_cutoff, dataset_name, n_labels = 10) {
+    
+    # Add new columns to the data
+    data <- data %>%
+      mutate(logP = -log10(p_val_adj),
+             Significant = ifelse(p_val_adj < pval_cutoff & abs(avg_log2FC) > log2fc_cutoff, "Yes", "No"),
+             is_Rp = grepl("^Rp", gene)) # Identify Rp genes
+    
+    # Identify top significant genes
+    top_genes <- data %>%
+      filter(Significant == "Yes") %>%
+      arrange(desc(logP), desc(abs(avg_log2FC))) %>%
+      slice_head(n = n_labels) %>%
+      mutate(rank = row_number()) # Add ranking numbers
+    
+    # Modify color mapping
+    data <- data %>%
+      mutate(Color = case_when(
+        Significant == "Yes" & is_Rp == TRUE ~ "Rp",
+        Significant == "Yes" & is_Rp == FALSE ~ "Significant",
+        TRUE ~ "Non-Significant"
+      ))
+    
+    # Create the volcano plot
+    p <- ggplot(data, aes(x = avg_log2FC, y = logP, color = Color)) +
+      geom_point(alpha = 0.5) +
+      scale_color_manual(values = c("Non-Significant" = "grey", "Significant" = "red", "Rp" = "green")) +
+      geom_text(data = top_genes, aes(label = paste(rank, gene, sep = ". ")), vjust = 2, size = 3, check_overlap = TRUE, color = "blue") + # Add ranking numbers to gene labels
+      theme_minimal() +
+      labs(title = paste("Volcano Plot for", dataset_name), x = "Log2 Fold Change", y = "-Log10 Adjusted p-value") +
+      geom_vline(xintercept = c(-log2fc_cutoff, log2fc_cutoff), color = "blue", linetype = "dashed") +
+      geom_hline(yintercept = -log10(pval_cutoff), color = "blue", linetype = "dashed")
+    
+    return(p)
+  }
+  
+  gc_volcano_plot <- create_volcano_plot(markers, log2fc_cutoff = cutoff, pval_cutoff = 0.01, dataset_name = "GC", n_labels = 55)
+  PGC_volcano_plot <- create_volcano_plot(markersPGC, log2fc_cutoff = cutoff, pval_cutoff = 0.01, dataset_name = "PGC", n_labels = 55)
+  OSN_volcano_plot <- create_volcano_plot(markersOSNS, log2fc_cutoff = cutoff, pval_cutoff = 0.01, dataset_name = "OSNs", n_labels = 55)
+  MTC_volcano_plot <- create_volcano_plot(markersMTC, log2fc_cutoff = cutoff, pval_cutoff = 0.01, dataset_name = "M/TC", n_labels = 55)
+  
+  plots <- gc_volcano_plot | PGC_volcano_plot |  OSN_volcano_plot | MTC_volcano_plot
+  
+  
+  # Return the result
+  return(deg)
+}
+```
+##Create Gene Sets
+```{r}
+deg200 <- get_top_markers(markers_all, 220)
+deg400 <- get_top_markers(markers_all, 440)
+deg600 <- get_top_markers(markers_all, 680)
+deg_norp <-  get_top_markers(markers_all_norp, 220)
+deg_cutoff1.5 <- get_top_markersFC_cutoff(markers_all, 220)
+deg_sigdiff <- get_top_markers(markers_all_sigdiff, 220)
+```
+##Process and save dataset for BLADE
+(To create expression profiles required by BLADE)
+```{r}
+process_and_save_geneset <- function(seurat_object, geneset, geneset_name, base_dir = here("Data", "Processed_BLADE")) {
+  # Subset the Seurat object
+  seurat_object_filtered <- subset(seurat_object, features = geneset)
+  
+  # Define helper functions
+  calc_std_dev <- function(seurat_obj) {
+    data <- GetAssayData(seurat_obj, assay = "RNA", slot = "data")
+    return(rowSds(as.matrix(data)))
+  }
+  
+  calc_mean_expr <- function(seurat_obj) {
+    data <- GetAssayData(seurat_obj, assay = "RNA", slot = "data")
+    return(rowMeans(as.matrix(data)))
+  }
+  
+  calc_variance <- function(seurat_obj) {
+    data <- GetAssayData(seurat_obj, assay = "RNA", slot = "data")
+    return(rowVars(as.matrix(data)))
+  }
+  
+  calc_corrected_std <- function(mean_matrix, variance_matrix) {
+    gene_list <- rownames(mean_matrix)
+    ct_list <- colnames(mean_matrix)
+    New_std <- matrix(nrow = length(gene_list), ncol = length(ct_list))
+    
+    for (i in seq_along(ct_list)) {
+      trend <- fitTrendVar(mean_matrix[, i], variance_matrix[, i])$trend
+      New_std[, i] <- sqrt(trend(mean_matrix[, i]))
+    }
+    
+    rownames(New_std) <- gene_list
+    colnames(New_std) <- ct_list
+    return(New_std)
+  }
+  
+  # Split the Seurat object by cell type
+  seurat_list <- SplitObject(seurat_object_filtered, split.by = "celltypes")
+  
+  # Apply the function to each cell type subset
+  std_dev_list <- lapply(seurat_list, calc_std_dev)
+  std_dev_matrix <- do.call(cbind, std_dev_list)
+  colnames(std_dev_matrix) <- names(std_dev_list)
+  
+  mean_expr_list <- lapply(seurat_list, calc_mean_expr)
+  mean_expr_matrix <- do.call(cbind, mean_expr_list)
+  colnames(mean_expr_matrix) <- names(mean_expr_list)
+  
+  variance_list <- lapply(seurat_list, calc_variance)
+  variance_matrix <- do.call(cbind, variance_list)
+  colnames(variance_matrix) <- names(variance_list)
+  
+  gene_names <- rownames(GetAssayData(seurat_object_filtered, assay = "RNA", slot = "data"))
+  rownames(std_dev_matrix) <- gene_names
+  rownames(mean_expr_matrix) <- gene_names
+  rownames(variance_matrix) <- gene_names
+  
+  New_std <- calc_corrected_std(mean_expr_matrix, variance_matrix)
+  
+  # Save the datasets
+  datasets <- list(
+    mean_expr_matrix = paste0("deg_mean", geneset_name, ".csv"),
+    New_std = paste0("deg_sd", geneset_name, ".csv")
+  )
+  
+  base_dir_full <- here(base_dir)
+  
+  for (data_name in names(datasets)) {
+    file_path <- file.path(base_dir_full, datasets[[data_name]])
+    
+    if (!dir.exists(dirname(file_path))) {
+      dir.create(dirname(file_path), recursive = TRUE)
+    }
+    
+    write.csv(get(data_name), file = file_path, row.names = TRUE)
+    message(paste("Saved", datasets[[data_name]]))
+  }
+  
+  return(list(mean_expr_matrix = mean_expr_matrix, New_std = New_std))
+}
+```
+
+```{r}
+results200 <- process_and_save_geneset(seurat_object1, deg200, "200")
+results400 <- process_and_save_geneset(seurat_object1, deg400, "400")
+results600 <- process_and_save_geneset(seurat_object1, deg600, "600")
+results_norp <- process_and_save_geneset(seurat_object1_norp, deg_norp, "_norp")
+results_sigdiff <-  process_and_save_geneset(seurat_object1_sig_diff, deg_sigdiff, "_sigdiff200")
+results_cutoff <-  process_and_save_geneset(seurat_object1, deg_cutoff1.5, "_cutoff1.5")
+```
+
