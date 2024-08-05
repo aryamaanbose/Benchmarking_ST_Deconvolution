@@ -1,6 +1,5 @@
 ---
 title: "Process scRNA-seq"
-output: html_notebook
 ---
 ##Location of script
 ```{r}
