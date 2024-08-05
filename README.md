@@ -1,13 +1,8 @@
-### Processing
-
-**Short title + project description:**
-Benchmarking Spatial Transcriptomics Tools Deconvolution Tools that use a reference scRNA profile, using Real and Simulated Data
+### Benchmarking Spatial Transcriptomics Tools Deconvolution Tools that use a reference scRNA profile, using Real and Simulated Data
 
 **Main contact:**
 Aryamaan Bose, a.bose@student.vu.nl
 
-**Team:**
-Aryamaan Bose 
 
 #### Directories:
 
