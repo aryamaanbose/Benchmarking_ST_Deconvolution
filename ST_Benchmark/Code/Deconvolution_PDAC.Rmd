@@ -1,0 +1,258 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(ggplot2)
+library(imager)
+library(readr)
+library(SpatialExperiment)
+library(magick)
+library(Seurat)
+library(cowplot)
+library(jpeg)
+library(ggplot2)
+library(grid)
+library(Seurat)
+library(data.table)
+library(tidyverse)
+library(dplyr)
+library(patchwork)
+library(dplyr)
+library(matrixStats)
+library(scran)
+library(gridExtra)
+library(reshape2)
+library(here)
+
+```
+
+```{r}
+
+load(here("Data/PDAC/sc_count.RData"))
+load(here("Data/PDAC/spatial_count.RData"))
+
+load(here("Data/PDAC/sc_meta.RData"))
+load(here("Data/PDAC//Figure4A_layer_annote.RData"))
+load(here("Data/PDAC//spatial_location.RData"))
+```
+
+```{r}
+
+```
+
+```{r}
+library(CARD)
+```
+
+```{r}
+CARD_obj = createCARDObject(
+	sc_count = sc_count,
+	sc_meta = sc_meta,
+	spatial_count = spatial_count,
+	spatial_location = spatial_location,
+	ct.varname = "cellType",
+	ct.select = unique(sc_meta$cellType),
+	sample.varname = "sampleInfo",
+	minCountGene = 100,
+	minCountSpot = 5) 
+
+
+
+```
+
+```{r}
+CARD_obj = CARD_deconvolution(CARD_object = CARD_obj)
+
+```
+
+```{r}
+print(CARD_obj@Proportion_CARD[1:2,])
+```
+
+```{r}
+colors = c("#FFD92F","#4DAF4A","#FCCDE5","#D9D9D9","#377EB8","#7FC97F","#BEAED4",
+    "#FDC086","#FFFF99","#386CB0","#F0027F","#BF5B17","#666666","#1B9E77","#D95F02",
+    "#7570B3","#E7298A","#66A61E","#E6AB02","#A6761D")
+p1 <- CARD.visualize.pie(
+	proportion = CARD_obj@Proportion_CARD,
+	spatial_location = CARD_obj@spatial_location, 
+ 	colors = colors, 
+  	radius = 0.4) ### You can choose radius = NULL or your own radius number
+
+print(p1)
+```
+
+```{r}
+proportion <- CARD_obj@Proportion_CARD
+```
+
+```{r}
+
+proportion <- read.csv(here("Spatial_Blade/Results", "PDAC_results.csv"))
+rownames(proportion) <- rownames(spatial_location)
+# Ensure proportions is a data frame
+proportion <- as.data.frame(proportion)
+
+```
+
+```{r}
+
+locations <- strsplit(rownames(proportion), "x")
+locations <- matrix(unlist(locations), ncol = 2, byrow = TRUE)
+locations <- apply(locations, 2, as.numeric)
+colnames(locations) <- c("x","y")
+
+
+locations <- as.data.frame(locations)
+
+locations$x <- round(locations$x)
+locations$y <- round(locations$y)
+locations$Location <- rownames(locations)
+
+rownames(locations) <- rownames(proportion)
+
+# Common plot theme
+common_theme <- theme_minimal() + 
+  theme(legend.position = "bottom")
+
+# Common labs
+common_labs <- labs(color = "Cell Type / Layer")
+
+# Common geom_point size
+point_size <- 5
+
+
+dominant_BLADE_idx <- apply(proportion, 1, which.max)
+
+cell_type_names <- unique(colnames(proportion))
+
+dominant_BLADE_types <- cell_type_names[dominant_BLADE_idx]
+names(dominant_BLADE_types) <- rownames(proportion)
+
+
+df_BLADE <- data.frame(Spot = names(dominant_BLADE_types), DominantType = dominant_BLADE_types, stringsAsFactors = FALSE)
+df_BLADE <- merge(df_BLADE, locations, by.x = "Spot", by.y = "row.names", all.x = TRUE)
+
+
+ggplot(df_BLADE, aes(x = x, y = y, color = DominantType)) +
+  geom_point(aes(colour = DominantType), size = 6.5 ) + 
+  common_theme +
+  labs(title = "Dominant Cell Types - BLADE") +
+  common_labs +
+  scale_color_manual(values = c("#FFD92F","red","orange","#D9D9D9","#377EB8","#7FC97F","#BEAED4",
+    "#FDC086","#FFFF99","#386CB0","#F0027F","#BF5B17","#666666","#1B9E77","#1B9E99",
+    "#7570B3","#E7298A","#66A61E","lightgreen","#A6761D") )  # lighter purple (Thistle)
+
+```
+
+```{r}
+layer_manual_PDAC
+
+ggplot(data = layer_manual_PDAC, aes(x = x, y = y)) +
+  geom_point(aes(colour = Region), size =4) + # Color points by 'Layer' # Label points by 'ID'
+  theme_minimal() +
+  labs(colour = "Layer")
+
+ggplot(data = layer_manual_PDAC, aes(x = x, y = y)) +
+  geom_point(aes(colour = Region), size = 3) + # Increase point size
+  facet_wrap(~ Region) + # Create separate panels for each 'Layer'
+  theme_minimal() +
+  labs(colour = "Layer")
+
+
+```
+
+
+
+```{r}
+
+proportions_df <- as.data.frame(proportion)
+
+# Convert row names to a column in proportions_df
+proportions_df <- proportions_df %>%
+  rownames_to_column(var = "Sample")
+
+layer_manual_PDAC <- layer_manual_PDAC %>%
+  rownames_to_column(var = "Sample")
+
+proportions_long <- proportions_df %>%
+  pivot_longer(cols = -Sample, names_to = "CellType", values_to = "Proportion") %>%
+  inner_join(layer_manual_PDAC, by = "Sample")
+
+# Function to perform ANOVA or t-test for each cell type
+perform_stat_test <- function(cell_type_data) {
+  unique_regions <- length(unique(cell_type_data$Region))
+  if (unique_regions > 2) {
+    # Perform ANOVA
+    anova_result <- aov(Proportion ~ Region, data = cell_type_data)
+    p_value <- summary(anova_result)[[1]]["Region", "Pr(>F)"]
+  } else {
+    # Perform t-test
+    t_test_result <- t.test(Proportion ~ Region, data = cell_type_data)
+    p_value <- t_test_result$p.value
+  }
+  return(p_value)
+}
+
+# Apply the function to each cell type
+p_values <- proportions_long %>%
+  group_by(CellType) %>%
+  summarise(p_value = perform_stat_test(cur_data())) %>%
+  ungroup()
+
+# Adjust p-values for multiple comparisons
+p_values <- p_values %>%
+  mutate(adj_p_value = p.adjust(p_value, method = "BH"))  # Benjamini-Hochberg adjustment
+
+# View the p-values and adjusted p-values
+print(p_values)
+
+# Function to add significance asterisks
+add_significance <- function(p) {
+  if (p < 0.001) {
+    return("***")
+  } else if (p < 0.01) {
+    return("**")
+  } else if (p < 0.05) {
+    return("*")
+  } else {
+    return("ns")  # not significant
+  }
+}
+
+# Add significance annotations to the p_values dataframe
+p_values <- p_values %>%
+  mutate(significance = sapply(adj_p_value, add_significance))
+
+
+
+
+# Visualize with boxplots
+
+ggplot(proportions_long, aes(x = Region, y = Proportion, fill = CellType)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Cell Type Proportions by Region in PDAC Samples",
+       x = "Region",
+       y = "Proportion") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(proportions_long, aes(x = Region, y = Proportion, fill = Region)) +
+  geom_boxplot() +
+  facet_wrap(~ CellType, scales = "free_y") +
+  theme_minimal() +
+  labs(title = "Cell Type Proportions by Region in PDAC Samples",
+       x = "Region",
+       y = "Proportion") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  # Add significance annotations
+  geom_text(data = p_values, aes(x = 1, y = Inf, label = significance), 
+            vjust = 1.5, hjust = -0.1, color = "red", size = 3, inherit.aes = FALSE)
+
+```
+

@@ -1,0 +1,97 @@
+---
+title: "ST data preprocess"
+---
+
+##Location script 
+```{r}
+here::i_am("Code/Preprocess_ST.Rmd")
+```
+
+##Ground Truth Annotations
+```{r}
+load(here("Data/spatial_mob/Meta", "Figure3A_layer_annote (1).RData"))
+
+```
+##Process Metadata
+```{r}
+load("/Users/aryamaanbose/My_Drive/BLADE_for_SpatialDeconvolution/Processing/BLADE/Data/Figure3A_layer_annote (1).RData")
+layer_to_cell_type <- list(
+  GCL = "GC",
+  GL = "PGC",
+  ONL = "OSNs",
+  MCL = "M.TC"
+)
+
+layer_manual_MOB$Spot <- rownames(layer_manual_MOB)
+layer_manual_MOB$celltypes <- sapply(layer_manual_MOB$Layer, function(x) layer_to_cell_type[[x]])
+dim(spe)
+dim(layer_manual_MOB)
+
+common_ids <- intersect(colnames(spe), rownames(layer_manual_MOB))
+
+# Ensure both datasets have the common IDs only
+spe <- spe[, common_ids]
+layer_manual_MOB <- layer_manual_MOB[common_ids, , drop = FALSE]
+
+# Add metadata
+spe <- AddMetaData(object = spe, metadata = layer_manual_MOB)
+#Idents(spe) <- "Layer"
+#SpatialDimPlot(spe, pt.size = 10)
+
+dim(seurat_object1)
+
+dim(spe)
+
+```
+##ST Data Processing
+```{r}
+raw_counts <- as.data.frame(raw_counts)
+
+rownames(raw_counts) <- raw_counts[, 1]
+
+raw_counts <- raw_counts[, -1]
+spe <- CreateSeuratObject(counts = t(raw_counts), assay = "spatial")
+
+#Extracting spatial coordinates from row names
+coords <- strsplit(colnames(spe), "x")
+coords <- matrix(unlist(coords), ncol = 2, byrow = TRUE)
+coords <- apply(coords, 2, as.numeric) # Convert to numeric
+
+
+transformation_matrix <- matrix(c(290.4, 0, 0, 0, 291.1, 0, -290.4, -291.1, 1), nrow = 3, byrow = TRUE)
+
+
+# Adding a third column of 1's for affine transformation
+homogeneous_coords <- cbind(coords, rep(1, nrow(coords)))
+
+# Apply the transformation
+transformed_coords <- homogeneous_coords %*% transformation_matrix
+
+# Keeping only the transformed x and y coordinates
+transformed_coords <- transformed_coords[, 1:2]
+
+
+transformed_coords_df <- as.data.frame(transformed_coords)
+names(transformed_coords_df) <- c("x", "y")
+rownames(transformed_coords_df) <- rownames(raw_counts)
+
+
+spe@images$image = new(Class = "SlideSeq", assay = "spatial", key = "he_image",coordinates = transformed_coords_df)
+
+
+col_sums <- colSums(GetAssayData(spe))
+
+# Identify spots with zero expression
+spots_with_zero_expression <- which(col_sums == 0)
+
+
+##Filterinf for number of unique genes in each spot check violin plot 
+##Spots with low expression count 
+spe <- subset(spe, nCount_spatial > 500)
+
+length(colnames(spe))
+
+spe <- NormalizeData(spe, normalization.method = "LogNormalize", scale.factor = 10000)
+
+```
+

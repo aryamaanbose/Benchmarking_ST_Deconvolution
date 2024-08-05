@@ -1,0 +1,1125 @@
+---
+title: "BLADE Preprocessing"
+output:
+  html_document:
+    toc: yes
+    toc_depth: '3'
+    df_print: paged
+  html_notebook:
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+    number_sections: yes
+---
+
+#IMPORTS AND SETUP
+
+##Import packages
+```{r setup, warning=FALSE}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(ggplot2)
+library(imager)
+library(readr)
+library(SpatialExperiment)
+library(magick)
+library(Seurat)
+library(cowplot)
+library(jpeg)
+library(ggplot2)
+library(grid)
+library(Seurat)
+library(data.table)
+library(tidyverse)
+library(dplyr)
+library(patchwork)
+library(dplyr)
+library(matrixStats)
+library(scran)
+library(gridExtra)
+library(reshape2)
+library(here)
+```
+
+##Location of script
+```{r}
+here::i_am("Code/PreprocessingFinal2.Rmd")
+```
+
+##Import scRNA Data
+```{r}
+MOBSC_sce_raw <- MOBSC_sce_raw <- fread(here("Data/scrna_mob/Raw", "GSE121891_OB_6_runs.raw.dge.csv"))
+
+meta_data <- read.csv(gzfile(here("Data/scrna_mob/Meta","GSE121891_OB_metaData_seurat.csv.gz")))
+
+meta_data2 <- read.csv(here("Data/scrna_mob/Meta", "GSE121891_Figure_2_metadata.txt"), sep = "\t")
+
+MOBSC_sce <- readRDS((url("https://figshare.com/ndownloader/files/40581983")))
+
+```
+We import the scRNA data from (Tepe),
+Under accession number GSE121891
+We have two sets of meta_data.
+
+With two levels of annotation 
+We use the annotation the same as the CARD paper 
+
+
+
+
+
+
+
+##Import Spatial data 
+```{r}
+raw_counts <- read_tsv(here("Data/spatial_mob/Raw","Spatial_MOB_Raw_counts.tsv"))
+```
+
+#HELPER FUNCTIONS
+##CDF Plot
+Defined by: create_cdf_plot(seurat object name, name of the object to appear on plot in "")
+
+• To be used with seurat objects
+• Uses a ecdf() function, 
+
+```{r}
+# Function to create a CDF plot for a dataset
+create_cdf_plot <- function(dataset, dataset_name) {
+  expression_data <- GetAssayData(dataset, slot = "data")
+  gene_means <- rowMeans(expression_data)
+  gene_cdf <- ecdf(gene_means)
+  gene_cdf_data <- data.frame(Expression = gene_means, CDF = gene_cdf(gene_means))
+  
+  # Calculate thresholds
+  highly_expressed_threshold <- quantile(gene_means, probs = 0.90)
+  very_highly_expressed_threshold <- quantile(gene_means, probs = 0.95)
+  very_very_highly_expressed_threshold <- quantile(gene_means, probs = 0.99)
+  low_10th <- quantile(gene_means, probs = 0.10)
+  low_25th <- quantile(gene_means, probs = 0.25)
+  
+  # Create the CDF plot
+  p <- ggplot(gene_cdf_data, aes(x = Expression, y = CDF)) +
+    geom_line() +
+    geom_vline(xintercept = highly_expressed_threshold, color = "blue", linetype = "dashed") +
+    geom_vline(xintercept = very_highly_expressed_threshold, color = "red", linetype = "dashed") +
+    geom_vline(xintercept = very_very_highly_expressed_threshold, color = "purple", linetype = "dashed") +
+    geom_vline(xintercept = low_10th, color = "green", linetype = "dashed") +
+    geom_vline(xintercept = low_25th, color = "orange", linetype = "dashed") +
+    labs(title = paste("CDF of Gene Expression for", dataset_name),
+         x = "Mean Expression",
+         y = "Cumulative Proportion") +
+    theme_minimal() +
+    geom_text(aes(x = highly_expressed_threshold, y = 0.95, label = "90th"), color = "blue", vjust = -0.5, angle = 90, size = 3) +
+    geom_text(aes(x = very_highly_expressed_threshold, y = 0.95, label = "95th"), color = "red", vjust = -0.5, angle = 90, size = 3) +
+    geom_text(aes(x = very_very_highly_expressed_threshold, y = 0.95, label = "99th"), color = "purple", vjust = -0.5, angle = 90, size = 3) +
+    geom_text(aes(x = low_10th, y = 0.05, label = "10th"), color = "green", vjust = -0.5, angle = 90, size = 3) +
+    geom_text(aes(x = low_25th, y = 0.25, label = "25th"), color = "orange", vjust = -0.5, angle = 90, size = 3)
+  
+  return(p)
+}
+
+```
+
+##Volcano Plot
+Defined by: create_volcano_plot(seurat object name, cutoff for log2fc, title of the plot in "")
+
+• Points beyond the cutoff will be highlighted in red 
+```{r}
+
+create_volcano_plot <- function(data,cutoff,dataset_name) {
+  data$logP <- -log10(data$p_val)
+  data$Significant <- ifelse(data$p_val_adj < 0.05 & abs(data$avg_log2FC) > cutoff, "Yes", "No")
+  
+  ggplot(data, aes(x = avg_log2FC, y = logP, color = Significant)) +
+    geom_point(alpha = 0.5) +
+    scale_color_manual(values = c("No" = "grey", "Yes" = "red")) +
+    theme_minimal() +
+    labs(title = dataset_name, x = "Log2 Fold Change", y = "-Log10 p-value")
+}
+
+```
+
+##Comparison plot 
+Defined by: 
+
+• Takes averge expression of both datasets, done using rowMeans()
+
+avg_exp_spe <- rowMeans(spe_filtered)
+avg_exp_seurat_object1 <- rowMeans(seurat_object1_filtered)
+```{r}
+create_comparison_plot <- function(avg_exp_spe, avg_exp_seurat_object1) {
+  merged_exp <- merge(avg_exp_spe, avg_exp_seurat_object1, by = "row.names", all = TRUE)
+  names(merged_exp) <- c("gene", "avg_exp_spe", "avg_exp_seurat_object1")
+  
+  top_genes_spe <- head(merged_exp[order(-merged_exp$avg_exp_spe), "gene"], 10)
+  top_genes_seurat_object1 <- head(merged_exp[order(-merged_exp$avg_exp_seurat_object1), "gene"], 10)
+  
+  # Combine the genes to label
+  genes_to_label <- union(top_genes_spe, top_genes_seurat_object1)
+  
+  # Plot with labels for selected genes
+  ggplot(merged_exp, aes(x = avg_exp_spe, y = avg_exp_seurat_object1)) + 
+    geom_point() + 
+    geom_text(data = subset(merged_exp, gene %in% genes_to_label), aes(label = gene), vjust = 2, hjust = 0.5, size = 3, check_overlap = TRUE) +
+    xlab("Average Expression in spe") + 
+    ylab("Average Expression in seurat_object1") +
+    ggtitle("Comparison of Gene Expression Ranges filtered dataset") +
+    theme_minimal()
+}
+```
+
+##Bland-Altman plot
+
+```{r}
+create_bland_altman_plot <- function(avg_exp_spe, avg_exp_seurat_object1) {
+  merged_exp <- merge(avg_exp_spe, avg_exp_seurat_object1, by = "row.names", all = TRUE)
+  names(merged_exp) <- c("gene", "avg_exp_spe", "avg_exp_seurat_object1")
+  
+  # Assuming 'avg_exp_spe' and 'avg_exp_seurat_object1' are already log-scaled
+  merged_exp$mean <- (merged_exp$avg_exp_spe + merged_exp$avg_exp_seurat_object1) / 2
+  merged_exp$difference <- merged_exp$avg_exp_spe - merged_exp$avg_exp_seurat_object1
+  
+  # Compute the mean and standard deviation of the differences
+  mean_diff <- mean(merged_exp$difference)
+  sd_diff <- sd(merged_exp$difference)
+  
+  # Bland-Altman plot
+  ggplot(merged_exp, aes(x = mean, y = difference)) +
+    geom_point(alpha = 0.5) +
+    geom_hline(yintercept = 0 , color ="black")+
+    geom_hline(yintercept = mean_diff, color = "blue", linetype = "dashed") +
+    geom_hline(yintercept = mean_diff + 1.96 * sd_diff, color = "red", linetype = "dashed") +
+    geom_hline(yintercept = mean_diff - 1.96 * sd_diff, color = "red", linetype = "dashed") +
+    geom_text(data = subset(merged_exp, gene %in% genes_to_label), aes(label = gene), vjust = 2, hjust = 0.5, size = 3, check_overlap = TRUE) +
+    xlab("Mean Log Expression (spe and seurat_object1)") +
+    ylab("Difference in Log Expression (spe - seurat_object1)") +
+    ggtitle("Bland-Altman Plot filtered dataset") +
+    theme_minimal()
+}
+
+```
+
+
+
+
+#SINGLE CELL ANALYSIS 
+
+##Create Seurat object
+Creating Seurat object from Raw counts file 
+```{r}
+rownames(MOBSC_sce_raw) <- MOBSC_sce_raw[[1]]  # Set the first column as row names
+
+
+seurat_object1 <- CreateSeuratObject(counts = MOBSC_sce_raw)
+```
+
+##Cell Type metadata
+```{r}
+seurat_object2 <- as.Seurat(MOBSC_sce) ## 182 genes 
+
+dim(seurat_object2@meta.data)
+
+seurat_object1 <- subset(seurat_object1, cells = colnames(seurat_object2))
+
+# Extract cell names from both objects
+cellnames_object1 <- rownames(seurat_object1@meta.data)
+cellnames_object2 <- rownames(seurat_object2@meta.data)
+
+
+# Check if the cell names match (you can use set operations to find mismatches)
+mismatched_cells <- setdiff(cellnames_object1, cellnames_object2)
+print(mismatched_cells)
+```
+
+##Other cell type annotations
+```{r}
+colnames(meta_data)
+unique(meta_data$ClusterName)
+
+
+colnames(meta_data2)
+dim(meta_data2)
+unique(meta_data2$FinalIds)
+unique(meta_data2$ClusterName)
+unique(meta_data2$ClusterId)
+
+table(meta_data2$ClusterName, meta_data2$FinalIds)
+
+```
+
+
+```{r}
+celltypes_data <- seurat_object2@meta.data$cell_type
+
+# Add the 'celltypes' column to seurat_object1's metadata
+seurat_object1@meta.data$celltypes <- celltypes_data[match(cellnames_object1, cellnames_object2)]
+
+# Add FinalIds to meta_data
+seurat_object1@meta.data$celltypes2 <- meta_data2$FinalIds[match(rownames(seurat_object1@meta.data), rownames(meta_data2))]
+
+# Add ClusterName column to seurat_object1's metadata
+##After subset only neuronal cell types are selected 
+seurat_object1@meta.data$celltypes3 <- meta_data$ClusterName[match(rownames(seurat_object1@meta.data), meta_data$X)]
+```
+
+##Quality metrics 
+###Calculate mitochondrial percentage 
+```{r}
+##Calculate Mitochondrial percentage
+seurat_object1[["percent.mt"]] <- PercentageFeatureSet(seurat_object1, pattern = "^mt-")
+```
+
+
+###Vlnplot
+```{r}
+Idents(seurat_object1) <- "none"
+VlnPlot(seurat_object1, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3 ,pt.size =0.2, alpha = 0.2)
+```
+### Vlnplot With cell types
+```{r}
+Idents(seurat_object1) <- "celltypes"
+VlnPlot(seurat_object1, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3 ,pt.size =0.2, alpha = 0.2)
+```
+
+##Subseting and filtering
+###Filter for QC metrics
+```{r}
+seurat_object1<- subset(seurat_object1, subset = nFeature_RNA > 200 & percent.mt < 60)
+```
+###Gene Filtering
+```{r}
+##Filtering for genes with expression above zero, rowsums of counts data should be above zero 
+genes_with_expression <- rownames(seurat_object1)[rowSums(GetAssayData(seurat_object1, slot = "counts")) > 0]
+
+# Subset the Seurat object to only include these genes
+seurat_object1 <- subset(seurat_object1, features = genes_with_expression)
+
+##Filtering for mitochondrial genes 
+# Identify mitochondrial genes by their common prefix (e.g., "MT-")
+mito_genes <- grep("^mt-", rownames(seurat_object1), value = TRUE)
+
+ribo_genes <- grep("^Rp", rownames(seurat_object1), value = TRUE)
+
+# Add specific genes that are very highly expressed across all cells
+genes_to_exclude <- c(mito_genes,ribo_genes, "Malat1")
+
+# Invert the exclusion to get a list of genes to keep
+genes_to_keep <- setdiff(rownames(seurat_object1), genes_to_exclude)
+
+# Subset the Seurat object to keep only the desired genes
+seurat_object1 <- subset(seurat_object1, features = genes_to_keep)
+
+
+
+```
+
+
+##Seurat preprocessing steps for scRNA data 
+```{r message=FALSE, warning=FALSE}
+
+seurat_object1 <- NormalizeData(seurat_object1, normalization.method = "LogNormalize", scale.factor = 10000)
+
+seurat_object1 <- ScaleData(seurat_object1, features = rownames(seurat_object1))
+# Run PCA
+seurat_object1 <- FindVariableFeatures(seurat_object1, selection.method = "vst", nfeatures = 2000)
+#
+top10 <- head(VariableFeatures(seurat_object1, ),10)
+
+plot1 <- VariableFeaturePlot(seurat_object1)
+LabelPoints(plot = plot1, points = top10, repel = TRUE, xnudge = 0, ynudge = 0)
+
+# Run PCA
+seurat_object1 <- RunPCA(seurat_object1, features = VariableFeatures(object = seurat_object1))
+
+
+```
+
+
+
+
+
+```{r}
+
+```
+
+
+###UMAP of scRNA data grouped by cell types 
+```{r}
+seurat_object1 <- RunUMAP(seurat_object1 , dims = 1:15)
+##UMAP 
+p1 <- DimPlot(seurat_object1 , group.by = "celltypes2", label = TRUE, reduction = "umap" )
+
+
+p2 <- DimPlot(seurat_object1, group.by = "celltypes",label = TRUE, reduction = "umap"  )
+
+p1 + p2 
+```
+
+##Differential marker selection scRNA
+```{r}
+Idents(seurat_object1) <- "celltypes"
+
+##Take only positive fold change values 
+markers_all <- FindAllMarkers(seurat_object1, only.pos = TRUE, min.pct = 0.1)
+
+markers <- markers_all[markers_all$cluster == 'GC', ]
+markersPGC <- markers_all[markers_all$cluster == 'PGC', ]
+markersOSNS <- markers_all[markers_all$cluster == 'OSNs', ]
+markersMTC <- markers_all[markers_all$cluster == 'M/TC', ]
+
+sorted_markers_GC <- head(arrange(markers, p_val),55)
+sorted_markers_PGC <- head(arrange(markersPGC, p_val),55)
+sorted_markers_OSNS <- head(arrange(markersOSNS, p_val),55)
+sorted_markers_MTC <- head(arrange(markersMTC, p_val),55)
+
+
+
+
+
+
+genes_PGC <- rownames(sorted_markers_PGC)
+
+genes_GC <- rownames(sorted_markers_GC)
+genes_OSNS <- rownames(sorted_markers_OSNS)
+genes_MTC <- rownames(sorted_markers_MTC)
+
+
+
+
+# Find common genes across all cell types
+common_genes = Reduce(intersect, list(genes_GC, genes_PGC, genes_OSNS, genes_MTC))
+
+# Combine all top markers into one list
+gene_pool <- unique(c(genes_GC, genes_PGC, genes_OSNS, genes_MTC))
+
+
+
+
+
+
+
+
+
+
+```
+```{r}
+
+
+
+
+
+```
+
+
+
+```{r}
+## 1 is the cutoff for log2fc 
+create_volcano_plot(markers,1, "GC")+
+create_volcano_plot(markersPGC,1, "PGC")+
+create_volcano_plot(markersOSNS,1, "OSNS")+
+create_volcano_plot(markersMTC,1,"MTC" )
+
+```
+
+
+```{r}
+
+
+
+```
+
+
+
+# SPATIAL DATA 
+
+## Formatting raw counts
+```{r}
+raw_counts <- as.data.frame(raw_counts)
+
+rownames(raw_counts) <- raw_counts[, 1]
+
+raw_counts <- raw_counts[, -1]
+
+```
+
+
+
+
+## Create seurat object
+```{r}
+spe <- CreateSeuratObject(counts = t(raw_counts), assay = "spatial")
+```
+
+
+
+
+## Extracting and adding coordinates
+```{r}
+#Extracting spatial coordinates from row names
+coords <- strsplit(colnames(spe), "x")
+coords <- matrix(unlist(coords), ncol = 2, byrow = TRUE)
+coords <- apply(coords, 2, as.numeric) # Convert to numeric
+
+
+transformation_matrix <- matrix(c(290.4, 0, 0, 0, 291.1, 0, -290.4, -291.1, 1), nrow = 3, byrow = TRUE)
+
+
+# Adding a third column of 1's for affine transformation
+homogeneous_coords <- cbind(coords, rep(1, nrow(coords)))
+
+# Apply the transformation
+transformed_coords <- homogeneous_coords %*% transformation_matrix
+
+# Keeping only the transformed x and y coordinates
+transformed_coords <- transformed_coords[, 1:2]
+
+
+transformed_coords_df <- as.data.frame(transformed_coords)
+names(transformed_coords_df) <- c("x", "y")
+rownames(transformed_coords_df) <- rownames(raw_counts)
+
+
+spe@images$image = new(Class = "SlideSeq", assay = "spatial", key = "he_image",coordinates = transformed_coords_df)
+
+```
+
+##Quality metrics 
+
+### Genes per spot 
+```{r}
+genes_per_spot <- Matrix::colSums(GetAssayData(spe, assay = "spatial", slot = "counts") > 0)
+
+
+# Plotting the histogram
+ggplot(data.frame(Genes = genes_per_spot), aes(x = Genes)) +
+    geom_histogram(bins = 30, fill = "blue", color = "black") +
+    theme_minimal() +
+    labs(title = "Frequency of Number of Genes Detected per Spot",
+         x = "Number of Genes Detected",
+         y = "Frequency (Number of Spots)")
+
+```
+
+###Spatial count
+```{r}
+SpatialFeaturePlot(spe, features = "nCount_spatial", pt.size = 10) + theme(legend.position = "right")
+```
+
+###Violin plot
+```{r}
+VlnPlot(spe, features = c("nFeature_spatial", "nCount_spatial"), ncol = 3 ,pt.size =0.2)
+
+length(colnames(spe))
+                                 
+```
+
+
+##Filtering 
+```{r}
+col_sums <- colSums(GetAssayData(spe))
+
+# Identify spots with zero expression
+spots_with_zero_expression <- which(col_sums == 0)
+
+
+##Filterinf for number of unique genes in each spot check violin plot 
+##Spots with low expression count 
+spe <- subset(spe, nCount_spatial > 500)
+
+length(colnames(spe))
+
+```
+##Seurat Preprocessing steps 
+
+```{r message=FALSE, warning=FALSE}
+spe <- NormalizeData(spe, normalization.method = "LogNormalize", scale.factor = 10000)
+
+spe <- FindVariableFeatures(spe, selection.method = "vst", nfeatures = 2000)
+
+spe
+spe <- ScaleData(spe, features = rownames(spe))
+
+spe <- RunPCA(spe, features = VariableFeatures(object = spe))
+```
+
+
+```{r}
+ElbowPlot(spe)
+```
+
+
+```{r}
+spe <- RunUMAP(spe , dims = 1:10)
+
+```
+
+```{r}
+spe <- FindNeighbors(spe, dims = 1:10)
+spe<- FindClusters(spe,resolution = 0.5)
+```
+
+
+```{r}
+DimPlot(spe, reduction = "umap")
+```
+
+```{r}
+
+top10 <- head(VariableFeatures(spe, ),10)
+
+plot1 <- VariableFeaturePlot(spe)
+
+LabelPoints(plot = plot1, points = top10, repel = TRUE, xnudge = 0, ynudge = 0)
+
+```
+
+```{r}
+SpatialDimPlot(spe, cells.highlight = CellsByIdentities(object = spe, idents = c(0,1,2,3)), facet.highlight = TRUE, ncol = 3, pt.siz= 10)
+```
+```{r}
+DimPlot(spe, pt.size = 1, reduction = "umap")
+
+
+
+
+```
+
+##Differential markers
+```{r}
+de_markers <- FindMarkers(spe, ident.1 = 0)
+de_markers1 <- FindMarkers(spe, ident.1 = 1)
+de_markers2 <- FindMarkers(spe, ident.1 = 2)
+de_markers3 <- FindMarkers(spe, ident.1 = 3)
+de_markers4 <- FindMarkers(spe, ident.1 = 4)
+
+```
+##Annotation of clusters
+###Transfer data 
+```{r}
+# Begin analysis with FindTransferAnchors to identify potential anchors between the reference and the query datasets
+anchors <- FindTransferAnchors(reference = seurat_object1, query = spe, normalization.method = "LogNormalize")
+
+# Transfer cell type annotations from reference to query dataset using TransferData
+predictions_assay <- TransferData(anchorset = anchors, refdata = seurat_object1$celltypes, prediction.assay = TRUE,
+                                  weight.reduction = spe[["pca"]], dims = 1:30)
+
+# Incorporate the predictions assay into the spatial Seurat object
+spe[["predictions"]] <- predictions_assay
+
+spe@assays$predictions$data
+
+# Set "predictions" as the default assay to facilitate visualization and further analysis
+DefaultAssay(spe) <- "predictions"
+
+# Attempt to visualize the spatial distribution of predicted cell types, including OSNs
+SpatialFeaturePlot(spe, features = c("GC", "PGC", "M/TC", "OSNs"), pt.size = 10, ncol = 2, crop = TRUE)
+```
+
+
+
+```{r}
+predictions_data <- as.data.frame(spe[['predictions']]@data)
+
+# Identify the dominant cell type for each spot if predictions exceed 75%
+dominant_cell_types_per_spot <- apply(predictions_data, 2, function(x) {
+  dominant_cell_type <- names(which.max(x))
+  if (max(x) > 0.20) {
+    return(dominant_cell_type)
+  } else {
+    return(NA)
+  }
+})
+
+# Create a data frame with spots and their dominant cell types
+spot_to_dominant_type <- data.frame(
+  spot = names(dominant_cell_types_per_spot),
+  dominant_type = dominant_cell_types_per_spot,
+  stringsAsFactors = FALSE
+)
+
+# Merge this with the original metadata to get clusters for each spot
+cell_metadata <- cbind(FetchData(spe, vars = "seurat_clusters"), spot_to_dominant_type)
+
+
+cluster_cell_type_freq <- cell_metadata %>%
+  filter(!is.na(dominant_type)) %>%
+  group_by(seurat_clusters, dominant_type) %>%
+  summarise(count = n()) %>%
+  ungroup()
+
+# Determine the most frequent dominant cell type per cluster
+cluster_dominant_cell_type <- cluster_cell_type_freq %>%
+  group_by(seurat_clusters) %>%
+  top_n(n = 1, wt = count) %>%
+  ungroup() %>%
+  select(seurat_clusters, dominant_type)
+
+
+
+
+```
+Observation: The predictions for Olfactory Sensory Neurons (OSNs) are nearly zero across the dataset.
+This outcome suggests that OSNs are either underrepresented in the query dataset or their gene expression profile significantly differs from that in the reference dataset, leading to poor anchor identification.
+
+
+```{r}
+load("/Users/aryamaanbose/My_Drive/BLADE_for_SpatialDeconvolution/Processing/BLADE/Data/Figure3A_layer_annote (1).RData")
+
+
+ggplot(data = layer_manual_MOB, aes(x = x, y = y)) +
+  geom_point(aes(colour = Layer), size = 5) + # Color points by 'Layer' # Label points by 'ID'
+  theme_minimal() +
+  labs(colour = "Layer") +
+  scale_color_manual(values = c("GCL" = "#FF9999",    # lighter red
+                              "MCL" = "#99CC99",  # lighter green
+                              "ONL" = "#9999FF",  # lighter blue
+                              "GL" = "#D8BFD8"))
+
+ggplot(data = layer_manual_MOB, aes(x = x, y = y)) +
+  geom_point(aes(colour = Layer), size = 3) + 
+  geom_text(aes(label = ID), vjust = 1.5, color = "black", size = 1.75) +# Increase point size
+  facet_wrap(~ Layer) + # Create separate panels for each 'Layer'
+  theme_minimal() +
+  labs(colour = "Layer") +
+  scale_color_manual(values = c("GCL" = "#FF9999",    # lighter red
+                              "MCL" = "#99CC99",  # lighter green
+                              "ONL" = "#9999FF",  # lighter blue
+                              "GL" = "#D8BFD8"))
+
+ggplot(data = layer_manual_MOB, aes(x = x, y = y)) +
+  geom_point(aes(colour = Layer), size = 5) +  # Color points by 'Layer'
+  geom_text(aes(label = ID), vjust = 1.5, color = "black", size = 1.75) +  # Add text labels
+  theme_minimal() +
+  labs(colour = "Layer") +
+  scale_color_manual(values = c("GCL" = "#FF9999",  # lighter red
+                                "MCL" = "#99CC99",  # lighter green
+                                "ONL" = "#9999FF",  # lighter blue
+                                "GL" = "#D8BFD8")) +
+  theme(legend.position = "bottom")
+
+
+intersect(colnames(coords), rownames(layer_manual_MOB))
+
+
+```
+
+```{r}
+
+```
+
+
+```{r}
+##Reneame assay to RNA
+spe <- RenameAssays(spe, spatial = "RNA")
+##Set active assya to RNA 
+spe@active.assay <- "RNA"
+```
+
+# MERGING AND INTEGERATION
+##Finding common genes and subsetting before merging
+```{r}
+common_genes <- intersect(rownames(spe), rownames(seurat_object1))
+spe <- subset(spe, features = common_genes)
+seurat_object1 <- subset(seurat_object1, features = common_genes)
+
+print(dim(spe))
+print(dim(seurat_object1))
+```
+
+##Merging
+```{r}
+##Add dataset specific tags 
+# Assign a new metadata column to differentiate cells from the spatial and scRNA-seq datasets
+spe$dataset <- "Spatial"
+seurat_object1$dataset <- "scRNA"
+
+
+##Merging the data 
+# Merge the spatial and scRNA-seq Seurat objects into a single object. 
+merged_seurat <- merge(x = spe, y = seurat_object1, add.cell.ids = c("spatial", "scrna"), project = "MergedData", merge.data = TRUE)
+
+
+# necessary for downstream PCA and clustering to mitigate the effects of highly expressed genes.
+merged_seurat <- ScaleData(merged_seurat)
+
+# FindVariableFeatures identifies genes with high cell-to-cell variation in the dataset.
+# 'selection.method = "vst"' uses the variance stabilizing transformation method.
+# 'nfeatures = 2000' selects the top 2000 variable features for PCA.
+merged_seurat <- FindVariableFeatures(merged_seurat, selection.method = "vst", nfeatures = 2000)
+
+
+merged_seurat <- RunPCA(merged_seurat, features = VariableFeatures(object = merged_seurat))
+
+
+# This helps in deciding the number of dimensions to use for further analysis (e.g., clustering, UMAP).
+ElbowPlot(merged_seurat)
+
+# RunUMAP performs Uniform Manifold Approximation and Projection for dimension reduction,
+# allowing visualization of the dataset in a low-dimensional (usually 2D) space.
+# 'dims = 1:15' specifies using the first 15 principal components from PCA.
+merged_seurat <- RunUMAP(merged_seurat, dims = 1:15)
+
+# 'group.by = "dataset"' colors cells based on their original dataset, highlighting integration.
+DimPlot(merged_seurat, reduction = "umap", label = TRUE, group.by = "dataset") + ggtitle("UMAP visualization of merged whole dataset")
+
+DimPlot(merged_seurat, reduction = 'pca' , group.by = "dataset", dims = c(1,2))
+
+```
+```{r}
+merged_seurat$combined <- paste(merged_seurat$dataset, merged_seurat$celltypes)
+
+# Now we plot using this new identity class
+DimPlot(merged_seurat, group.by = 'combined', label = TRUE) + 
+  NoLegend() + 
+  ggtitle("UMAP visualization of merged whole dataset")
+```
+
+- Spatial dataset forms a tight, distinct cluster, separate from the scRNA-seq dataset.
+- There is a lack of integration between the two datasets on the UMAP, suggesting platform-specific differences.
+- The spatial dataset (blue points) shows a homogeneous cell population, potentially influenced by the spatial context.
+- The scRNA-seq dataset (red points) displays a more heterogeneous mix of cells, indicating a variety of cell states or types.
+- The clear demarcation between datasets may reflect technical biases or biological differences inherent to each method.
+
+
+##Integeration
+```{r}
+object.list <-list(spe,seurat_object1)
+##Set active assya to spatial because integeration anchor uses pca  
+spe@active.assay <- "RNA"
+
+features <- SelectIntegrationFeatures(object.list = object.list)
+
+
+integration_anchors <- FindIntegrationAnchors(object.list = object.list, anchor.features = features)
+
+integerate_seurat <- IntegrateData(anchorset = integration_anchors, k.weight = 46)
+
+DefaultAssay(integerate_seurat) <- "integrated"
+
+integerate_seurat <- ScaleData(integerate_seurat)
+
+# Run PCA
+integerate_seurat <- RunPCA(integerate_seurat, npcs = 20, verbose = FALSE)
+
+ElbowPlot(integerate_seurat)
+
+# Run UMAP
+integerate_seurat <- RunUMAP(integerate_seurat, dims = 1:20)
+
+# Plot UMAP
+DimPlot(integerate_seurat, reduction = 'pca', group.by = c('dataset') , label = TRUE) + NoLegend() + ggtitle("UMAP visualization of integerated whole dataset")
+
+```
+
+
+```{r}
+# Assuming 'dataset' and 'celltypes' are metadata columns in your Seurat object
+# We will create a new identity class combining both
+integerate_seurat$combined <- paste(integerate_seurat$dataset, integerate_seurat$celltypes)
+
+# Now we plot using this new identity class
+DimPlot(integerate_seurat, group.by = 'combined', label = TRUE, reduction = "pca") + 
+  NoLegend() + 
+  ggtitle("UMAP visualization of integrated whole dataset")
+```
+
+#FILTERED WITH DEGS
+
+```{r}
+##Gene_pool is the per cell type differentially expressed genes 
+common_genes <- gene_pool
+
+
+# Subset both datasets to the common genes
+spe_filtered <- subset(spe, features = common_genes)
+seurat_object1_filtered <- subset(seurat_object1, features = common_genes)
+
+seurat_object1_filtered <- subset(seurat_object1_filtered, features = rownames(spe_filtered))
+
+dim(spe_filtered)
+dim(seurat_object1_filtered)
+
+
+
+
+```
+
+#CHECKING RANGES 
+
+##CDF plot
+###scRNA vs Spatial common genes 
+```{r}
+create_cdf_plot(seurat_object1, "scRNA whole dataset")
+```
+
+```{r}
+create_cdf_plot(spe, "Spatial whole dataset")
+
+```
+###scRNA vs Spatial filetered for DEGs
+```{r}
+create_cdf_plot(seurat_object1_filtered, "scRNA filtered dataset")
+```
+
+```{r}
+create_cdf_plot(spe_filtered, "Spatial filtered dataset")
+
+```
+
+##Comparison plot
+```{r}
+avg_exp_spe <- rowMeans(spe_filtered)
+avg_exp_seurat_object1 <- rowMeans(seurat_object1_filtered)
+
+
+
+
+merged_exp <- merge(avg_exp_spe, avg_exp_seurat_object1, by = "row.names", all = TRUE)
+names(merged_exp) <- c("gene", "avg_exp_spe", "avg_exp_seurat_object1")
+
+top_genes_spe <- head(merged_exp[order(-merged_exp$avg_exp_spe), "gene"], 10)
+top_genes_seurat_object1 <- head(merged_exp[order(-merged_exp$avg_exp_seurat_object1), "gene"], 10)
+
+# Combine the genes to label
+genes_to_label <- union(top_genes_spe, top_genes_seurat_object1)
+
+# Assuming 'avg_exp_spe' and 'avg_exp_seurat_object1' are already log-scaled
+merged_exp$mean <- (merged_exp$avg_exp_spe + merged_exp$avg_exp_seurat_object1) / 2
+merged_exp$difference <- merged_exp$avg_exp_spe - merged_exp$avg_exp_seurat_object1
+
+# Compute the mean and standard deviation of the differences
+mean_diff <- mean(merged_exp$difference)
+sd_diff <- sd(merged_exp$difference)
+
+
+```
+
+###Average expression 
+```{r}
+create_comparison_plot(avg_exp_spe, avg_exp_seurat_object1)
+```
+##Bland-Altman plot 
+
+```{r}
+create_bland_altman_plot(avg_exp_spe, avg_exp_seurat_object1)
+```
+
+#SINGLE CELL EXPRESSION PROFILES
+```{r}
+# Function to calculate standard deviation for each gene
+calc_std_dev <- function(seurat_obj) {
+  data <- GetAssayData(seurat_obj, assay = "RNA", slot = "data")
+  return(rowSds(as.matrix(data)))
+}
+
+# Function to calculate mean expression for each gene
+calc_mean_expr <- function(seurat_obj) {
+  data <- GetAssayData(seurat_obj, assay = "RNA", slot = "data")
+  return(rowMeans(as.matrix(data)))
+}
+
+# Function to calculate variance for each gene
+calc_variance <- function(seurat_obj) {
+  data <- GetAssayData(seurat_obj, assay = "RNA", slot = "data")
+  return(rowVars(as.matrix(data)))
+}
+
+calc_corrected_std <- function(mean_matrix, variance_matrix) {
+  gene_list <- rownames(mean_matrix)
+  ct_list <- colnames(mean_matrix)
+  New_std <- matrix(nrow = length(gene_list), ncol = length(ct_list))
+
+  for (i in seq_along(ct_list)) {
+    trend <- fitTrendVar(mean_matrix[, i], variance_matrix[, i])$trend
+    New_std[, i] <- sqrt(trend(mean_matrix[, i]))
+  }
+
+  rownames(New_std) <- gene_list
+  colnames(New_std) <- ct_list
+  return(New_std)
+}
+
+```
+##Computing matrices
+
+```{r}
+# Split the Seurat object by cell type
+seurat_list <- SplitObject(seurat_object1_filtered, split.by = "celltypes")
+
+```
+
+###Standard deviation
+```{r}
+
+# Apply the function to each cell type subset
+std_dev_list <- lapply(seurat_list, calc_std_dev)
+
+# Combine into a single data matrix
+std_dev_matrix <- do.call(cbind, std_dev_list)
+
+# Name the columns as cell types
+colnames(std_dev_matrix) <- names(std_dev_list)
+
+# Extract gene names
+gene_names <- rownames(GetAssayData(seurat_object1_filtered, assay = "RNA", slot = "data"))
+
+
+# Assign gene names to the rows
+rownames(std_dev_matrix) <- gene_names
+
+
+```
+
+###Mean
+```{r}
+
+# Apply the function to each cell type subset
+mean_expr_list <- lapply(seurat_list, calc_mean_expr)
+
+# Combine into a single data matrix
+mean_expr_matrix <- do.call(cbind, mean_expr_list)
+
+# Name the columns as cell types
+colnames(mean_expr_matrix) <- names(mean_expr_list)
+
+# Assign gene names to the rows (using the same gene_names variable from before)
+rownames(mean_expr_matrix) <- gene_names
+
+
+```
+
+###Variance
+```{r}
+
+# Apply the function to each cell type subset
+variance_list <- lapply(seurat_list, calc_variance)
+
+# Combine into a single data matrix
+variance_matrix <- do.call(cbind, variance_list)
+
+# Name the columns as cell types
+colnames(variance_matrix) <- names(variance_list)
+
+# Assign gene names to the rows (using the same gene_names variable from before)
+rownames(variance_matrix) <- gene_names
+
+```
+###Corrected SD
+```{r}
+New_std <- calc_corrected_std(mean_expr_matrix, variance_matrix)
+```
+
+##Visualizing difference
+
+```{r}
+# Prepare the data
+data_old <- melt(std_dev_matrix)
+colnames(data_old) <- c("Gene", "CellType", "OldStdDev")
+data_new <- melt(New_std)
+colnames(data_new) <- c("Gene", "CellType", "NewStdDev")
+
+# Merge with mean expression data
+mean_data <- melt(mean_expr_matrix)
+colnames(mean_data) <- c("Gene", "CellType", "MeanExpr")
+data_combined <- merge(merge(data_old, data_new), mean_data)
+
+# Plot old std dev vs mean with color-coded points based on CellType
+p1 <- ggplot(data_combined, aes(x = MeanExpr, y = OldStdDev, color = CellType)) +
+      geom_point(alpha = 0.5) +
+      theme_minimal() +
+      ggtitle("Old Standard Deviation vs Mean Expression") +
+      xlab("Mean Expression") +
+      ylab("Old Standard Deviation")
+
+# Plot new std dev vs mean with color-coded points based on CellType
+p2 <- ggplot(data_combined, aes(x = MeanExpr, y = NewStdDev, color = CellType)) +
+      geom_point(alpha = 0.5) +
+      theme_minimal() +
+      ggtitle("New Standard Deviation vs Mean Expression") +
+      xlab("Mean Expression") +
+      ylab("New Standard Deviation")
+
+# Print the plots
+p1
+```
+
+```{r}
+p2
+
+```
+
+
+#SAVING
+```{r}
+data_slot <- GetAssayData(spe_filtered, slot = "data")
+data_frame <- as.data.frame(as.matrix(data_slot))
+
+
+scrna_data <- GetAssayData(seurat_object1, assay = "RNA", slot = "data")
+dim(scrna_data)
+
+seurat_object1@assays$RNA$counts
+
+
+scrna_meta <- seurat_object1@meta.data
+
+
+dim(scrna_meta)
+
+datasets <- list(
+  mean_expr_list = "BLADE_scrna_Mean.csv",
+  New_std = "BLADE_scrna_SD.csv",
+  scrna_data = "BLADE_scrna_full.csv",
+  scrna_meta = "BLADE_scrna_meta.csv"
+)
+
+# Base directory within your project structure
+base_dir <- here("Data", "Processed_BLADE")
+
+
+# Iterate over the datasets and their file names
+for (data_name in names(datasets)) {
+  # Construct the file path
+  file_path <- file.path(base_dir, datasets[[data_name]])
+  
+  # Ensure the directory exists
+  if (!dir.exists(dirname(file_path))) {
+    dir.create(dirname(file_path), recursive = TRUE)
+  }
+  
+  # Write the dataset to a CSV file
+  write.csv(get(data_name), file = file_path, row.names = TRUE)
+}
+```
+
+
+#Saving RDS File
+```{r}
+
+
+
+```
+
+
+```{r}
+
+
+# Assuming 'seurat_object' is your Seurat object and you're interested in the RNA assay
+raw_counts <- GetAssayData(seurat_object1_filtered, assay = "RNA", slot = "counts")
+
+# Counting the number of zero values
+number_of_zeros <- sum(raw_counts == 0)
+
+print(number_of_zeros)
+
+```
+
+```{r}
+# For normalized data
+scrna_data <- GetAssayData(seurat_object1_filtered, assay = "RNA", slot = "data")
+
+
+
+```
+

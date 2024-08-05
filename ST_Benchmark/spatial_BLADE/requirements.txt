@@ -1,0 +1,11 @@
+jupyter
+numpy
+numba
+scikit-learn
+joblib
+multiprocess
+time
+scipy
+qgrid
+seaborn
+pip
