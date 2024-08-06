@@ -1,3 +1,8 @@
+
+####Run AutogeneS, a gene selection tool for Deconvolution experiments
+### The optimizer is run on fixed mode to get specific number of genes. 
+
+
 import os
 import pandas as pd
 import anndata
@@ -95,7 +100,7 @@ if __name__ == "__main__":
     selected_gene_names = adata.var_names[selected_genes].tolist()
     print("Selected gene names:", selected_gene_names)
 
-    filename = "selected_genes600.txt"
+    filename = "Results/selected_genes600.txt"
 
     # Open the file in write mode and save the list
     with open(filename, 'w') as file:

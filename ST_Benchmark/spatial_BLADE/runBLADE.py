@@ -1,3 +1,5 @@
+
+
 import pandas as pd
 import numpy as np
 
@@ -46,7 +48,7 @@ def run_blade(scrna_mean_file, scrna_sd_file,spatial, result_name, small_number=
 
     # Find common genes
     common_genes = list(set(spatial_data.index) & set(scrna_mean.index) & set(scrna_sd.index))
-
+    #autogene_genes
     # Subset data to include only common genes
     spatial_data_common = spatial_data.loc[common_genes]
     scrna_mean_common = scrna_mean.loc[common_genes]
@@ -125,7 +127,7 @@ def run_blade(scrna_mean_file, scrna_sd_file,spatial, result_name, small_number=
     # Convert to DataFrame
     df_cell_fractions_spatial = pd.DataFrame(cell_fractions_spatial, columns=cell_type_labels)
 
-    results_dir = os.path.join(project_root,  "Benchmarking_ST_Deconvolution", "ST_Benchmark" ,"spatial_Blade", "Results_new")
+    results_dir = os.path.join(project_root,  "Benchmarking_ST_Deconvolution", "ST_Benchmark" , "Results")
     base_file_name = result_name
     extension = ".csv"
 
