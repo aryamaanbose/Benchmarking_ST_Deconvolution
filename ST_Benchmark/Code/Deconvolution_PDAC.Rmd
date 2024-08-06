@@ -37,8 +37,8 @@ load(here("Data/PDAC/sc_count.RData"))
 load(here("Data/PDAC/spatial_count.RData"))
 
 load(here("Data/PDAC/sc_meta.RData"))
-load(here("Data/PDAC//Figure4A_layer_annote.RData"))
-load(here("Data/PDAC//spatial_location.RData"))
+load(here("Data/PDAC/Figure4A_layer_annote.RData"))
+load(here("Data/PDAC/spatial_location.RData"))
 ```
 
 ```{r}

@@ -14,7 +14,7 @@ Aryamaan Bose, a.bose@student.vu.nl
 #### Dependencies:
 The Python scripts depend on the outputs from the R scripts. Specifically, the R scripts must be executed first to generate the necessary files for the Python-based BLADE deconvolution analysis. 
 
-The execution for deconvolution tools based on R mainly (`MuSiC`, `CARD`, `RCTD`, and `CibersortX`) are present in `ST_Benchmark_R`.
+The execution for deconvolution tools based on R mainly (`MuSiC`, `CARD`, `RCTD`, and `CibersortX`) are present in the 'Code' directory.
 
 #### How to Execute the Code:
 

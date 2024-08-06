@@ -2,8 +2,7 @@ library(scales)
 library(spdep)
 
 
-
-load("/Users/aryamaanbose/My_Drive/BLADE_for_SpatialDeconvolution/Processing/BLADE/Data/Figure3A_layer_annote (1).RData")
+load(here("Data/spatial_mob/Meta", "Figure3A_layer_annote (1).RData"))
 layer_to_cell_type <- list(
   GCL = "GC",
   GL = "PGC",
@@ -13,12 +12,6 @@ layer_to_cell_type <- list(
 
 layer_manual_MOB$Spot <- rownames(layer_manual_MOB)
 layer_manual_MOB$celltypes <- sapply(layer_manual_MOB$Layer, function(x) layer_to_cell_type[[x]])
-
-
-
-
-
-
 
 
 

@@ -1,33 +1,4 @@
 
-load("/Users/aryamaanbose/My_Drive/BLADE_for_SpatialDeconvolution/Processing/BLADE/Data/Figure3A_layer_annote (1).RData")
-layer_to_cell_type <- list(
-  GCL = "GC",
-  GL = "PGC",
-  ONL = "OSNs",
-  MCL = "M/TC"
-)
-
-layer_manual_MOB$Spot <- rownames(layer_manual_MOB)
-layer_manual_MOB$celltypes <- sapply(layer_manual_MOB$Layer, function(x) layer_to_cell_type[[x]])
-dim(spe)
-dim(layer_manual_MOB)
-
-
-
-
-
-# Match the row names of layer_manual_MOB with the column names of spe
-common_ids <- intersect(colnames(spe), rownames(layer_manual_MOB))
-
-# Ensure both datasets have the common IDs only
-spe <- spe[, common_ids]
-layer_manual_MOB <- layer_manual_MOB[common_ids, , drop = FALSE]
-
-# Add metadata
-spe <- AddMetaData(object = spe, metadata = layer_manual_MOB)
-#Idents(spe) <- "Layer"
-#SpatialDimPlot(spe, pt.size = 10)
-
 
 dim(spe)
 
@@ -35,14 +6,16 @@ metadata <- spe@meta.data
 
 intersect(rownames(spe), rownames(layer_manual_MOB))
 
-dim(baseline3)
-
+dom = 0.70
 
 metadata$spatial_snn_res.0.5 <- as.character(metadata$spatial_snn_res.0.5)
 metadata$spatial_snn_res.0.5[metadata$spatial_snn_res.0.5 == "0"] <- "PGC"
 metadata$spatial_snn_res.0.5[metadata$spatial_snn_res.0.5 == "1"] <- "GC"
 metadata$spatial_snn_res.0.5[metadata$spatial_snn_res.0.5 == "2"] <- "OSNs"
 metadata$spatial_snn_res.0.5[metadata$spatial_snn_res.0.5 == "3"] <- "M/TC"
+
+
+
 
 
 # Ensure all desired cell types are included
@@ -72,8 +45,8 @@ print(identity_matrix)
 for (i in 1:nrow(identity_matrix)) {
   num_celltypes <- sum(identity_matrix[i, ] == 1)
   if (num_celltypes > 0) {
-    identity_matrix[i, identity_matrix[i, ] == 1] <- 0.30
-    identity_matrix[i, identity_matrix[i, ] == 0] <- (1 - 0.30 * num_celltypes) / (length(cell_types) - num_celltypes)
+    identity_matrix[i, identity_matrix[i, ] == 1] <- dom
+    identity_matrix[i, identity_matrix[i, ] == 0] <- (1 - dom * num_celltypes) / (length(cell_types) - num_celltypes)
   }
 }
 

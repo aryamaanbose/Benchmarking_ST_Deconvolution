@@ -25,6 +25,11 @@ library(scran)
 library(gridExtra)
 library(reshape2)
 library(here)
+library(MuSiC)
+library(scDesign3)
+library(spacexr)
+library(IOBR)
+
 
 
 

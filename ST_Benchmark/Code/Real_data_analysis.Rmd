@@ -1,10 +1,397 @@
 ---
-title: "R Notebook"
+title: "Real Data Analysis"
 ---
 
+##Calculate ARI
 ```{r}
+####Important for real data analyisis please run
+calculate_ari_and_purity <- function(proportions_sim, true_labels_df) {
+  # Helper function to calculate Node Purity
+  calculateNodePurity <- function(true_labels, predicted_labels) {
+    combined <- table(true_labels, predicted_labels)
+    sum_max_per_cluster <- sum(apply(combined, 2, max))  # Max per column (predicted label)
+    total_predictions <- sum(combined)
+    purity <- sum_max_per_cluster / total_predictions
+    return(purity)
+  }
+  
+  cell_type_names <- as.factor(colnames(proportions_sim))
+  
+  # Determine dominant cell types for each spot
+  dominant_idx <- apply(proportions_sim, 1, which.max)
+  dominant_types <- cell_type_names[dominant_idx]
+  names(dominant_types) <- rownames(proportions_sim)
+  
+  # Create a dataframe for the results
+  df_sim <- data.frame(Spot = names(dominant_types), DominantType = dominant_types, stringsAsFactors = FALSE)
+  
+  # Ensure the dataframe is ordered correctly
+  df_sim <- df_sim[order(df_sim$Spot),]
+  
+  # Reorder df_sim to match the order of spots in true_labels_df
+  df_sim_ordered <- df_sim[match(true_labels_df$Spot, df_sim$Spot),]
+  
+  # Verify alignment
+  if (!all(true_labels_df$Spot == df_sim_ordered$Spot)) {
+    stop("Spot alignment issue in the dataset")
+  }
+  
+  # Extract predicted and true labels
+  predicted_labels <- df_sim_ordered$DominantType
+  true_labels <- true_labels_df$celltypes
+  
+  # Calculate ARI and Node Purity
+  ARI <- mclust::adjustedRandIndex(true_labels, predicted_labels)
+  Node_Purity <- calculateNodePurity(true_labels, predicted_labels)
+  
+  return(list(ARI = ARI, Node_Purity = Node_Purity))
+}
+```
+
+##Calculate PCC accuracy 
+[Spe is the spatial object that needs to be loaded first, run Preprocess_ST.Rmd first]
+```{r}
+spe <- FindVariableFeatures(spe, selection.method = "vst", nfeatures = 2000)
+spe <- ScaleData(spe, features = rownames(spe))
+spe <- RunPCA(spe, features = VariableFeatures(object = spe))
+spe <- FindNeighbors(spe, dims = 1:10)
+spe<- FindClusters(spe,resolution = 0.5)
+
+de_markers0 <- FindMarkers(spe, ident.1 = 0)
+de_markers1 <- FindMarkers(spe, ident.1 = 1)
+de_markers2 <- FindMarkers(spe, ident.1 = 2)
+de_markers3 <- FindMarkers(spe, ident.1 = 3)
+
+sorted_markers_GC <- de_markers1%>%
+  filter(avg_log2FC >= 0) %>%
+  arrange(p_val_adj)
+
+
+sorted_markers_PGC <- de_markers0%>%
+  filter(avg_log2FC >= 0) %>%
+  arrange(p_val_adj)
+
+
+sorted_markers_MTC <- de_markers3%>%
+  filter(avg_log2FC >= 0) %>%
+  arrange(p_val_adj)
+
+
+sorted_markers_OSN <- de_markers2%>%
+  filter(avg_log2FC >= 0) %>%
+  arrange(p_val_adj)
+
+
+
+GC_genes <- rownames(head(sorted_markers_GC, 10))
+
+PGC_genes <- rownames(head(sorted_markers_PGC, 10))
+
+
+MTC_genes <- rownames(head(sorted_markers_MTC, 10))
+
+
+OSN_genes <- rownames(head(sorted_markers_OSN, 10))
+
+SpatialFeaturePlot(spe, features = OSN_genes, pt.size = 10)
+
+
+# Extract the gene expression values for each cell type marker gene
+marker_genes <- list(
+  GC = GC_genes,
+  PGC = PGC_genes,
+  OSNs =OSN_genes,
+  M.TC = MTC_genes
+)
+
+
+calculate_correlations <- function(spe, marker_genes, proportions) {
+  # Initialize results data frame
+  correlation_results <- data.frame(CellType = character(), Gene = character(), Correlation = numeric())
+  
+  for (cell_type in names(marker_genes)) {
+    if (cell_type %in% colnames(proportions)) {
+      for (gene in marker_genes[[cell_type]]) {
+        # Extract gene expression values
+        if (gene %in% rownames(GetAssayData(object = spe, assay = "spatial", slot = "data"))) {
+          gene_expression <- GetAssayData(object = spe, assay = "spatial", slot = "data")[gene, ]
+        } else {
+          next  # Skip this gene if it's not found
+        }
+        
+        # Extract cell type proportions
+        cell_type_proportions <- proportions[, cell_type]
+        
+        # Check dimensions
+        if (length(gene_expression) == length(cell_type_proportions)) {
+          # Calculate correlation
+          correlation <- cor(gene_expression, cell_type_proportions)
+          
+          # Store results
+          correlation_results <- rbind(correlation_results, data.frame(
+            CellType = cell_type,
+            Gene = gene,
+            Correlation = correlation
+          ))
+        } else {
+          print(paste("Mismatched dimensions for gene", gene, "in cell type", cell_type))
+        }
+      }
+    } else {
+      print(paste("Cell type", cell_type, "not found in proportions"))
+    }
+  }
+  
+  split_data <- split(correlation_results, correlation_results$CellType)
+  
+  total_correlation <- aggregate(Correlation ~ CellType, correlation_results, mean)
+  mean_total_correlation <- mean(total_correlation$Correlation)
+  
+  # Create a list to store results
+  results <- list()
+  
+  # Store total correlations per cell type
+  for (i in 1:nrow(total_correlation)) {
+    cell_type <- total_correlation$CellType[i]
+    results[[cell_type]] <- total_correlation$Correlation[i]
+  }
+  
+  # Store the mean of all total correlations
+  results$total <- mean_total_correlation
+  
+  
+  # Print total correlation values
+  print("Total correlation values per cell type:")
+  print(total_correlation)
+  print(paste("Mean of all total correlations:", mean_total_correlation))
+  
+  return(results)
+}
 
 ```
 
+##Function to process data and compute
+```{r}
+process_dataset <- function(dataset_name, true_labels_df, base_dir = here("spatial_Blade", "Results")) {
+  # Load the dataset
+  proportion_matrix <- read.csv(here(base_dir, dataset_name))
+  print(proportion_matrix)
+  print(dim(proportion_matrix))
+  # Ensure rownames match the column names of true_labels_df
+  rownames(proportion_matrix) <- colnames(spe)
+  
+  # Calculate ARI and Node Purity
+  results <- calculate_ari_and_purity(proportion_matrix, true_labels_df)
+  
+  # Print and return the results
+  print(paste("ARI for", dataset_name, ":", results$ARI))
+  print(paste("Node Purity for", dataset_name, ":", results$Node_Purity))
+  
+  
+  
+  correlation <- calculate_correlations(spe, marker_genes, proportion_matrix)
+  
+  results$GC <- correlation$GC
+  results$PGC <- correlation$PGC
+  results$MTC <- correlation$M.TC
+  results$OSN <- correlation$OSNs
+  
+  
+  plot_dominant_ct <- function(proportions_sim, layer_manual_MOB, point_size = 3) {
+    # Common plot theme
+    common_theme <- theme_minimal() + 
+      theme(legend.position = "bottom")
+    
+    # Common labels
+    common_labs <- labs(color = "Cell Type / Layer")
+    
+    # Calculate the dominant indices and types
+    dominant_idx <- apply(proportions_sim, 1, which.max)
+    cell_type_names <- colnames(proportions_sim)
+    dominant_types <- cell_type_names[dominant_idx]
+    names(dominant_types) <- rownames(proportions_sim)
+    
+    # Create the data frame for plotting
+    df_dominant <- data.frame(
+      Spot = names(dominant_types),
+      DominantType = dominant_types,
+      stringsAsFactors = FALSE
+    )
+    
+    # Add the x and y coordinates directly from layer_manual_MOB
+    if (!all(c("x", "y") %in% colnames(layer_manual_MOB))) {
+      stop("The input data frame 'layer_manual_MOB' must contain 'x' and 'y' columns.")
+    }
+    
+    coordinates <- layer_manual_MOB[, c("x", "y")]
+    coordinates$Spot <- rownames(layer_manual_MOB)
+    
+    # Merge coordinates with dominant cell types
+    df_dominant <- merge(df_dominant, coordinates, by = "Spot", all.x = TRUE)
+    
+    # Plotting with ggplot2
+    ggplot(df_dominant, aes(x = x, y = y, color = DominantType)) +
+      geom_point(size = point_size) + 
+      common_theme +
+      labs(title = "Dominant Cell Types") +
+      common_labs +
+      scale_color_manual(values = c("lightblue",
+                                    "orange",
+                                    "red",
+                                    "#9999FF"))  # Adjust colors as needed
+  }
+  
+  results$plot <- plot_dominant_ct(proportion_matrix, layer_manual_MOB, point_size = 3)
+  
+  my_colors <- c( "lightblue", "orange", "red", "#9999FF")
+  
+
+  results$prop_matrix <- proportion_matrix
+  
+  return(results)
+}
+
+process_dataset2 <- function(dataset,dataset_name, true_labels_df) {
+  # Load the dataset
+  proportion_matrix <- dataset 
+  rownames(proportion_matrix) <- colnames(spe)
+  # Calculate ARI and Node Purity
+  results <- calculate_ari_and_purity(proportion_matrix, true_labels_df)
+  
+  # Print and return the results
+  print(paste("ARI for", dataset_name, ":", results$ARI))
+  print(paste("Node Purity for", dataset_name, ":", results$Node_Purity))
+  
+  
+  
+  correlation <- calculate_correlations(spe, marker_genes, proportion_matrix)
+  
+  results$GC <- correlation$GC
+  results$PGC <- correlation$PGC
+  results$MTC <- correlation$M.TC
+  results$OSN <- correlation$OSNs
+  
+  
+  plot_dominant_ct <- function(proportions_sim, layer_manual_MOB, point_size = 5) {
+    # Common plot theme
+    common_theme <- theme_minimal() + 
+      theme(legend.position = "bottom")
+    
+    # Common labels
+    common_labs <- labs(color = "Cell Type / Layer")
+    
+    # Calculate the dominant indices and types
+    dominant_idx <- apply(proportions_sim, 1, which.max)
+    cell_type_names <- colnames(proportions_sim)
+    dominant_types <- cell_type_names[dominant_idx]
+    names(dominant_types) <- rownames(proportions_sim)
+    
+    # Create the data frame for plotting
+    df_dominant <- data.frame(
+      Spot = names(dominant_types),
+      DominantType = dominant_types,
+      stringsAsFactors = FALSE
+    )
+    
+    # Add the x and y coordinates directly from layer_manual_MOB
+    if (!all(c("x", "y") %in% colnames(layer_manual_MOB))) {
+      stop("The input data frame 'layer_manual_MOB' must contain 'x' and 'y' columns.")
+    }
+    
+    coordinates <- layer_manual_MOB[, c("x", "y")]
+    coordinates$Spot <- rownames(layer_manual_MOB)
+    
+    # Merge coordinates with dominant cell types
+    df_dominant <- merge(df_dominant, coordinates, by = "Spot", all.x = TRUE)
+    
+    # Plotting with ggplot2
+    ggplot(df_dominant, aes(x = x, y = y, color = DominantType)) +
+      geom_point(size = point_size) + 
+      common_theme +
+      labs(title = "Dominant Cell Types") +
+      common_labs +
+      scale_color_manual(values = c("lightblue",
+                                    "orange",
+                                    "red",
+                                    "#9999FF"))  # Adjust colors as needed
+  }
+  
+  results$plot <- plot_dominant_ct(proportion_matrix, layer_manual_MOB, point_size = 3)
+  
+  my_colors <- c( "lightblue", "orange", "red", "#9999FF")
+  
+  prop <- CARD.visualize.pie(
+    proportion = proportion_matrix,
+    spatial_location = locations, 
+    colors = my_colors, 
+    radius = 0.4)
+  
+  results$prop <- prop
+  
+ 
+  
+  results$prop_matrix <- proportion_matrix
+  
+  return(results)
+}
+
+```
+
+##Loading Results
+```{r}
+results_BLADE1 <- process_dataset("deg200.csv", layer_manual_MOB)
+
+results_BLADE2 <- process_dataset("deg400.csv", layer_manual_MOB)
+
+results_BLADE3 <- process_dataset("deg600.csv", layer_manual_MOB)
 
 
+
+
+results_card200 <- process_dataset2(card_200,"CARD 200", layer_manual_MOB)
+
+results_card400 <- process_dataset2(card_400, "CARD 400",layer_manual_MOB)
+
+results_card600 <- process_dataset2(card_600, "CARD 600",layer_manual_MOB)
+
+
+
+results_music200 <- process_dataset2(music_200,"MUSIC 200", layer_manual_MOB)
+
+results_music400 <- process_dataset2(music_400, "MUSIC 400",layer_manual_MOB)
+
+results_music600 <- process_dataset2(music_600,"MUSIC 600", layer_manual_MOB)
+
+
+
+
+results_BLADE_norp <- process_dataset("deg_norp.csv", layer_manual_MOB)
+results_CARDnorp  <-  process_dataset2(card_norp,"CARD No RP", layer_manual_MOB)
+results_MUSICnorp <- process_dataset2(music_norp,"Music No RP", layer_manual_MOB)
+
+
+results_BLADE_sigdiff <- process_dataset("deg_sigdiff200.csv", layer_manual_MOB)
+results_CARD_sigdiff  <-  process_dataset2(card_sigdiff,"CARD No sigdiff", layer_manual_MOB)
+results_MUSIC_sigdiff <- process_dataset2(music_sigdiff,"Music No sigdiff", layer_manual_MOB)
+
+
+
+results_CARD_cutoff <- process_dataset2(card_cutoff,"L2FC cutoff 1.5 CARD",  layer_manual_MOB)
+results_BLADE_cutoff <- process_dataset("deg_cutoff1.5.csv", layer_manual_MOB)
+results_MUSIC_cutoff <- process_dataset2(music_cutoff,"L2FC cutoff 1.5 MUSIC", layer_manual_MOB)
+
+
+bladesp200 <-  process_dataset("BLADE_sp_200.csv", layer_manual_MOB)
+bladesp400 <-  process_dataset("BLADE_sp_400.csv", layer_manual_MOB)
+bladesp600 <-  process_dataset("BLADE_sp_600.csv", layer_manual_MOB)
+
+
+
+
+bladespnorp <-  process_dataset("BLADE_sp_norp.csv", layer_manual_MOB)
+bladespsigdiff <-  process_dataset("BLADE_sp_sigdiff.csv", layer_manual_MOB)
+bladespfc <-  process_dataset("BLADE_sp_fc.csv", layer_manual_MOB)
+
+
+
+```

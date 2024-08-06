@@ -12,9 +12,17 @@ here::i_am("Code/Preprocess_ST.Rmd")
 load(here("Data/spatial_mob/Meta", "Figure3A_layer_annote (1).RData"))
 
 ```
-##Process Metadata
+
+##ST data
 ```{r}
-load("/Users/aryamaanbose/My_Drive/BLADE_for_SpatialDeconvolution/Processing/BLADE/Data/Figure3A_layer_annote (1).RData")
+raw_counts <- read_tsv(here("Data/spatial_mob/Raw","Spatial_MOB_Raw_counts.tsv"))
+```
+
+
+##Process Metadata
+[Metadata contains one less spot than ST data]
+```{r}
+load(here("Data/spatial_mob/Meta","Figure3A_layer_annote (1).RData"))
 layer_to_cell_type <- list(
   GCL = "GC",
   GL = "PGC",
@@ -32,8 +40,10 @@ common_ids <- intersect(colnames(spe), rownames(layer_manual_MOB))
 # Ensure both datasets have the common IDs only
 spe <- spe[, common_ids]
 layer_manual_MOB <- layer_manual_MOB[common_ids, , drop = FALSE]
+```
 
-# Add metadata
+##Optionally add annotations to ST data 
+```{r}
 spe <- AddMetaData(object = spe, metadata = layer_manual_MOB)
 #Idents(spe) <- "Layer"
 #SpatialDimPlot(spe, pt.size = 10)
@@ -43,6 +53,7 @@ dim(seurat_object1)
 dim(spe)
 
 ```
+
 ##ST Data Processing
 ```{r}
 raw_counts <- as.data.frame(raw_counts)
@@ -92,6 +103,11 @@ spe <- subset(spe, nCount_spatial > 500)
 length(colnames(spe))
 
 spe <- NormalizeData(spe, normalization.method = "LogNormalize", scale.factor = 10000)
+
+```
+
+
+```{r}
 
 ```
 
