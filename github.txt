@@ -11,5 +11,4 @@ https://github.com/aryamaanbose/Benchmarking_ST_Deconvolution
 
 **Step-by-Step Guide**
 
-For a detailed step-by-step guide on setting up the environment, running analyses, and understanding the computational workflow, please refer to the main README file located in the root of the File Storage System (FSS).
-
+For a detailed step-by-step guide on setting up the environment, running analyses, and understanding the computational workflow, please refer to the main README file located in this directory /Benchmarking_ST_Deconvolution

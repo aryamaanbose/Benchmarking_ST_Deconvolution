@@ -33,7 +33,7 @@ org1$Spots <- paste0("spot_", seq_len(nrow(org1)))
 
 
 ##
-load("/Users/aryamaanbose/My_Drive/BLADE_for_SpatialDeconvolution/Processing/BLADE/Data/Figure3A_layer_annote (1).RData")
+load(here("Data/spatial_mob/Meta", "Figure3A_layer_annote (1).RData"))
 
 layer_to_cell_type <- list(
   GCL = "GC",
@@ -70,6 +70,7 @@ compute_proportions6 <- function(layer_manual_MOB, pn = 0.0, sc = 0.0, specified
     names(avg_proportions) <- unique_cell_types
   }
   
+  print(avg_proportions)
   # Extract coordinates for all spots to compute a distance matrix
   coords <- layer_manual_MOB[, c("x", "y")]
   dist_matrix <- as.matrix(dist(coords))
@@ -141,7 +142,7 @@ compute_proportions6 <- function(layer_manual_MOB, pn = 0.0, sc = 0.0, specified
 
 
 ###Finding optimal radii based on n nearest nieghbours 
-calculate_optimal_radius <- function(coords, k=270) {
+calculate_optimal_radius <- function(coords, k= ) {
   # Calculate the distance matrix
   dist_matrix <- as.matrix(dist(coords))
   
@@ -249,21 +250,21 @@ specified_props3 <- c(0.30, 0.30,  0.30, 0.30)
 names(specified_props3) <- c("GC", "M/TC", "OSNs", "PGC")
 
 
-p1 <- compute_proportions6(layer_manual_MOB, pn = 0.00, sc = 0.00, specified_dominant_proportions = specified_props, neighborhood_radius = 2, add_labels = FALSE)
+p1 <- compute_proportions6(layer_manual_MOB, pn = 0.00, sc = 0.00, specified_dominant_proportions = specified_props, neighborhood_radius = 1.69, add_labels = FALSE)
 
 
-p2 <- compute_proportions6(layer_manual_MOB, pn = 0.0, sc = 0.00, specified_dominant_proportions = specified_props, neighborhood_radius = 3.8, add_labels = FALSE)
+p2 <- compute_proportions6(layer_manual_MOB, pn = 0.0, sc = 0.00, specified_dominant_proportions = specified_props, neighborhood_radius = 2.143, add_labels = FALSE)
 
 
-p3 <- compute_proportions6(layer_manual_MOB, pn = 0.0, sc = 0.00, specified_dominant_proportions = specified_props, neighborhood_radius = 7, add_labels = FALSE, adjust_zeroes = TRUE)
-
-
-
-p4 <- compute_proportions6(layer_manual_MOB, pn = 0.0, sc = 0.00, specified_dominant_proportions = specified_props2, neighborhood_radius = 7, add_labels = FALSE, adjust_zeroes = TRUE)
+p3 <- compute_proportions6(layer_manual_MOB, pn = 0.0, sc = 0.00, specified_dominant_proportions = specified_props, neighborhood_radius = 3.408, add_labels = FALSE)
 
 
 
-p5 <- compute_proportions6(layer_manual_MOB, pn = 0.0, sc = 0.00, specified_dominant_proportions = specified_props3, neighborhood_radius = 7, add_labels = FALSE, adjust_zeroes = TRUE)
+p4 <- compute_proportions6(layer_manual_MOB, pn = 0.0, sc = 0.00, specified_dominant_proportions = specified_props2, neighborhood_radius = 3.408, add_labels = FALSE)
+
+
+
+p5 <- compute_proportions6(layer_manual_MOB, pn = 0.0, sc = 0.00, specified_dominant_proportions = specified_props3, neighborhood_radius = 3.408, add_labels = FALSE)
 
 
 
@@ -285,6 +286,8 @@ p2_plot <- CARD.visualize.pie(
   spatial_location = layer_manual_MOB, 
   colors = my_colors, 
   radius = 0.5)
+
+p1_plot + p2_plot + p3_plot
 
 p3_plot <- CARD.visualize.pie(
   proportion = p3,

@@ -32,7 +32,7 @@ layer_to_cell_type <- list(
 
 layer_manual_MOB$Spot <- rownames(layer_manual_MOB)
 layer_manual_MOB$celltypes <- sapply(layer_manual_MOB$Layer, function(x) layer_to_cell_type[[x]])
-dim(spe)
+
 dim(layer_manual_MOB)
 
 common_ids <- intersect(colnames(spe), rownames(layer_manual_MOB))

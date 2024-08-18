@@ -257,6 +257,15 @@ get_top_markersFC_cutoff <- function(markers_all, total_genes, cutoff = 1.5) {
 ```
 ##Create Gene Sets
 ```{r}
+markers_all <- FindAllMarkers(seurat_object1, only.pos = TRUE, min.pct = 0.1)
+markers_all_norp <- FindAllMarkers(seurat_object1_norp, only.pos = TRUE, min.pct = 0.1)
+markers_all_sigdiff <-  FindAllMarkers(seurat_object1_sig_diff, only.pos = TRUE, min.pct = 0.1)
+
+
+
+
+
+
 deg200 <- get_top_markers(markers_all, 220)
 deg400 <- get_top_markers(markers_all, 440)
 deg600 <- get_top_markers(markers_all, 680)
