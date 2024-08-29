@@ -346,20 +346,24 @@ results_BLADE2 <- process_dataset("deg400.csv", layer_manual_MOB)
 results_BLADE3 <- process_dataset("deg600.csv", layer_manual_MOB)
 
 
+results_90_manual <- process_dataset("deg200_sp2.csv", layer_manual_MOB)
+results_90_SP <- process_dataset("deg_sp3.csv", layer_manual_MOB)
+results_50_SP <- process_dataset("deg_sp4.csv", layer_manual_MOB)
+results_30_SP <- process_dataset("deg_sp5.csv", layer_manual_MOB)
+
+
+
+
 
 
 results_card200 <- process_dataset2(card_200,"CARD 200", layer_manual_MOB)
-
 results_card400 <- process_dataset2(card_400, "CARD 400",layer_manual_MOB)
-
 results_card600 <- process_dataset2(card_600, "CARD 600",layer_manual_MOB)
 
 
 
 results_music200 <- process_dataset2(music_200,"MUSIC 200", layer_manual_MOB)
-
 results_music400 <- process_dataset2(music_400, "MUSIC 400",layer_manual_MOB)
-
 results_music600 <- process_dataset2(music_600,"MUSIC 600", layer_manual_MOB)
 
 
