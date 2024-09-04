@@ -114,6 +114,15 @@ significantly_diff_genes
 genes_to_keep <- setdiff(rownames(seurat_object1), significantly_diff_genes)
 seurat_object1_sig_diff <- subset(seurat_object1,features = genes_to_keep)
 ```
+
+```{r}
+
+Idents(seurat_object1) <- "celltypes"
+Idents(seurat_object1_norp) <- "celltypes"
+Idents(seurat_object1_sig_diff) <- "celltypes"
+```
+
+
 ##Function for finding marker genes
 ```{r}
 get_top_markers <- function(markers_all, total_genes) {

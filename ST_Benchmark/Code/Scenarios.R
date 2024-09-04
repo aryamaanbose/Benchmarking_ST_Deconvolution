@@ -297,8 +297,8 @@ a4 <- CARD.visualize.pie(
   radius = 0.5)
 
 
-psub <- p5[rownames(p5) %in% rownames_to_keep, ]
-lsub <- layer_manual_MOB[rownames(layer_manual_MOB) %in% rownames_to_keep, ]
+psub <- p5[rownames(p5) , ]
+lsub <- layer_manual_MOB[rownames(layer_manual_MOB) , ]
 
 a5 <- CARD.visualize.pie(
   proportion = psub,
@@ -306,7 +306,7 @@ a5 <- CARD.visualize.pie(
   colors = my_colors,
   radius = 0.5)
 
-a1 + a2 + a3 + a4 + a5
+a5 +a1 + a2 + a3 + a4 
 
 
 

@@ -4,25 +4,22 @@
 
 
 blade_ARI <- data.frame(
-  Method = c("200 Genes", "400 Genes", "600 Genes", "200 Remove Ribosomal Genes" , "200 Remove Platform Bias Genes", "200 More Upregulated Genes"),
+  Method = c("200 Genes", "400 Genes", "600 Genes","Ribsosomal Gene Filtration 200 Genes" , "Bland-Altman Filtration 200 Genes", "Log2FC Cutof 200 Genes"),
   ARI = c(results_BLADE1$ARI, results_BLADE2$ARI, results_BLADE3$ARI, results_BLADE_norp$ARI, results_BLADE_sigdiff$ARI, results_BLADE_cutoff$ARI))
 
 blade_sp_ARI <- data.frame(
-  Method = c("200 Genes", "400 Genes", "600 Genes", "200 Remove Ribosomal Genes", "200 Remove Platform Bias Genes", "200 More Upregulated Genes"),
+  Method = c("200 Genes", "400 Genes", "600 Genes","Ribsosomal Gene Filtration 200 Genes", "Bland-Altman Filtration 200 Genes", "Log2FC Cutof 200 Genes"),
   ARI = c(bladesp200$ARI, bladesp400$ARI, bladesp600$ARI, bladespnorp$ARI, bladespsigdiff$ARI, bladespfc$ARI)
 )
 
 
 card_ARI <- data.frame(
-  Method = c("200 Genes", "400 Genes", "600 Genes", "200 Remove Ribosomal Genes" , "200 Remove Platform Bias Genes", "200 More Upregulated Genes", "Full Gene Set"),
+  Method = c("200 Genes", "400 Genes", "600 Genes","Ribsosomal Gene Filtration 200 Genes" , "Bland-Altman Filtration 200 Genes", "Log2FC Cutof 200 Genes", "Full Gene Set"),
   ARI = c(results_card200$ARI, results_card400$ARI, results_card600$ARI, results_CARDnorp$ARI, results_CARD_sigdiff$ARI, results_CARD_cutoff$ARI, results_card_full$ARI))
 
 music_ARI <- data.frame(
-  Method = c("200 Genes", "400 Genes", "600 Genes", "200 Remove Ribosomal Genes" , "200 Remove Platform Bias Genes", "200 More Upregulated Genes", "Full Gene Set"),
+  Method = c("200 Genes", "400 Genes", "600 Genes","Ribsosomal Gene Filtration 200 Genes" , "Bland-Altman Filtration 200 Genes", "Log2FC Cutof 200 Genes", "Full Gene Set"),
   ARI = c(results_music200$ARI, results_music400$ARI, results_music600$ARI, results_MUSICnorp$ARI, results_MUSIC_sigdiff$ARI, results_MUSIC_cutoff$ARI, results_music_full$ARI))
-
-
-
 
 
 
@@ -40,16 +37,27 @@ combined_ARI <- rbind(
 # Convert Method to factor with specified levels to maintain order
 combined_ARI$Method <- factor(combined_ARI$Method, levels = unique(combined_ARI$Method))
 
-
 ari <- ggplot(combined_ARI, aes(x = Method, y = ARI, color = MethodType, group = MethodType)) +
   geom_point(size = 3) +
   geom_line(aes(group = MethodType), size = 1) +
+  geom_text(aes(label = sprintf("%.3f", ARI)), vjust = -0.5, size = 3.5) +  # Add ARI values above the points
   theme_minimal() +
   labs(title = "ARI for Feature Selection Tests",
        x = "Gene Set",
-       y = "Adjusted Rand Index") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
-        legend.title = element_blank())
+       y = "Adjusted Rand Index",
+       color = "Methods"  # Change legend title to "Methods"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", size = 18),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 20),
+    plot.title = element_text(size = 20),
+    axis.title = element_text(size = 20),
+    axis.text.y = element_text(size = 15)
+  )
+
+# Print the plot
+print(ari)
 
 
 
@@ -59,7 +67,7 @@ ari <- ggplot(combined_ARI, aes(x = Method, y = ARI, color = MethodType, group =
 
 
 blade_correlation <- data.frame(
-  Method = c("200 Genes", "400 Genes", "600 Genes", "200 Remove Ribosomal Genes", "200 Remove Platform Bias Genes", "200 More Upregulated Genes"),
+  Method = c("200 Genes", "400 Genes", "600 Genes", "Ribsosomal Gene Filtration 200 Genes", "Bland-Altman Filtration 200 Genes", "Log2FC Cutof 200 Genes"),
   GC = c(results_BLADE1$GC, results_BLADE2$GC, results_BLADE3$GC, results_BLADE_norp$GC, results_BLADE_sigdiff$GC, results_BLADE_cutoff$GC),
   PGC = c(results_BLADE1$PGC, results_BLADE2$PGC, results_BLADE3$PGC, results_BLADE_norp$PGC, results_BLADE_sigdiff$PGC, results_BLADE_cutoff$PGC),
   MTC = c(results_BLADE1$MTC, results_BLADE2$MTC, results_BLADE3$MTC, results_BLADE_norp$MTC, results_BLADE_sigdiff$MTC, results_BLADE_cutoff$MTC),
@@ -67,7 +75,7 @@ blade_correlation <- data.frame(
 )
 
 blade_sp_correlation <- data.frame(
-  Method = c("200 Genes", "400 Genes", "600 Genes", "200 Remove Ribosomal Genes", "200 Remove Platform Bias Genes", "200 More Upregulated Genes"),
+  Method = c("200 Genes", "400 Genes", "600 Genes","Ribsosomal Gene Filtration 200 Genes", "Bland-Altman Filtration 200 Genes", "Log2FC Cutof 200 Genes"),
   GC = c(bladesp200$GC, bladesp400$GC, bladesp600$GC, bladespnorp$GC, bladespsigdiff$GC, bladespfc$GC),
   PGC = c(bladesp200$PGC, bladesp400$PGC, bladesp600$PGC, bladespnorp$PGC, bladespsigdiff$PGC, bladespfc$PGC),
   MTC = c(bladesp200$MTC, bladesp400$MTC, bladesp600$MTC, bladespnorp$MTC, bladespsigdiff$MTC, bladespfc$MTC),
@@ -76,7 +84,7 @@ blade_sp_correlation <- data.frame(
 
 
 card_correlation <- data.frame(
-  Method = c("200 Genes", "400 Genes", "600 Genes", "200 Remove Ribosomal Genes", "200 Remove Platform Bias Genes", "200 More Upregulated Genes"),
+  Method = c("200 Genes", "400 Genes", "600 Genes","Ribsosomal Gene Filtration 200 Genes", "Bland-Altman Filtration 200 Genes", "Log2FC Cutof 200 Genes"),
   GC = c(results_card200$GC, results_card400$GC, results_card600$GC, results_CARDnorp$GC, results_CARD_sigdiff$GC, results_CARD_cutoff$GC),
   PGC = c(results_card200$PGC, results_card400$PGC, results_card600$PGC, results_CARDnorp$PGC, results_CARD_sigdiff$PGC, results_CARD_cutoff$PGC),
   MTC = c(results_card200$MTC, results_card400$MTC, results_card600$MTC, results_CARDnorp$MTC, results_CARD_sigdiff$MTC, results_CARD_cutoff$MTC),
@@ -84,7 +92,7 @@ card_correlation <- data.frame(
 )
 
 music_correlation <- data.frame(
-  Method = c("200 Genes", "400 Genes", "600 Genes", "200 Remove Ribosomal Genes", "200 Remove Platform Bias Genes", "200 More Upregulated Genes"),
+  Method = c("200 Genes", "400 Genes", "600 Genes","Ribsosomal Gene Filtration 200 Genes", "Bland-Altman Filtration 200 Genes", "Log2FC Cutof 200 Genes"),
   GC = c(results_music200$GC, results_music400$GC, results_music600$GC, results_MUSICnorp$GC, results_MUSIC_sigdiff$GC, results_MUSIC_cutoff$GC),
   PGC = c(results_music200$PGC, results_music400$PGC, results_music600$PGC, results_MUSICnorp$PGC, results_MUSIC_sigdiff$PGC, results_MUSIC_cutoff$PGC),
   MTC = c(results_music200$MTC, results_music400$MTC, results_music600$MTC, results_MUSICnorp$MTC, results_MUSIC_sigdiff$MTC, results_MUSIC_cutoff$MTC),
@@ -114,7 +122,7 @@ print(method_correlation)
 combined_melted <- melt(method_correlation, id.vars = c("Method", "MethodType"), variable.name = "Metric", value.name = "Value")
 
 # Filter to include only the 200 Genes method
-filtered_data <- combined_melted[combined_melted$Method == "200 Remove Ribosomal Genes", ]
+filtered_data <- combined_melted[combined_melted$Method =="Ribsosomal Gene Filtration 200 Genes", ]
 filtered_data2 <- combined_melted[combined_melted$Method == "200 Genes", ]
 
 # Create a single boxplot for each method type with all metrics combined
@@ -152,7 +160,7 @@ final_plot <- (ari | cor) + plot_annotation(tag_levels = ("A")) &
 create_plot <- function(plot_object, title) {
   plot_object + theme_minimal() +
     theme(
-      plot.title = element_text(hjust = 0.5, size = 10),  # Center the title and make it smaller
+      plot.title = element_text(hjust = 0.5, size = 13),  # Center the title and make it smaller
       axis.title = element_blank(),  # Remove axis titles
       axis.text.x = element_blank(),  # Remove x-axis text
       axis.text.y = element_blank(),  # Remove y-axis text
@@ -160,16 +168,16 @@ create_plot <- function(plot_object, title) {
       legend.position = "none"
     ) +
     labs(title = title) +
-    geom_point(size = 2)  # Make points smaller
+    geom_point(size = 0.5)  # Make points smaller
 }
 
 blade_plots <- list(
   create_plot(results_BLADE1$plot, "200 Genes"),
   create_plot(results_BLADE2$plot, "400 Genes"),
   create_plot(results_BLADE3$plot, "600 Genes"),
-  create_plot(results_BLADE_norp$plot, "200 Remove Ribosomal Genes"),
-  create_plot(results_BLADE_sigdiff$plot, "200 Remove Platform Bias Genes"),
-  create_plot(results_BLADE_cutoff$plot, "200 More Upregulated Genes")
+  create_plot(results_BLADE_norp$plot,"Ribsosomal Gene Filtration 200 Genes"),
+  create_plot(results_BLADE_sigdiff$plot, "Bland-Altman Filtration 200 Genes"),
+  create_plot(results_BLADE_cutoff$plot, "Log2FC Cutof 200 Genes")
 )
 
 blade_sp_plots <- list(

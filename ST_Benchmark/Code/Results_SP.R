@@ -9,19 +9,25 @@ blade_ARI$Method <- factor(blade_ARI$Method, levels = unique(blade_ARI$Method))
 
 
 # Plot ARI with connected points and formatted labels
-ggplot(blade_ARI, aes(x = Method, y = ARI)) +
+ARI <- ggplot(blade_ARI, aes(x = Method, y = ARI)) +
   geom_point(size = 3) +
   geom_line(aes(group = 1), size = 1) +
-  geom_text(aes(label = sprintf("%.3f", ARI)), vjust = -1) +  # Format ARI to 3 decimal places
+  geom_text(aes(label = sprintf("%.3f", ARI)), vjust = -1, size = 5) +  # Format ARI to 3 decimal places, increase text size
   theme_minimal() +
   labs(title = "ARI for spatialBLADE Tests",
        x = "Results",
        y = "Adjusted Rand Index (ARI)") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
-        legend.position = "none")
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 14),  # Increase x-axis text size
+    axis.text.y = element_text(size = 14),  # Increase y-axis text size
+    axis.title.x = element_text(size = 16),  # Increase x-axis title size
+    axis.title.y = element_text(size = 16),  # Increase y-axis title size
+    plot.title = element_text( size = 18),  # Increase plot title size
+    legend.position = "none"
+  )
 
 
-
+ARI + scatter_plot
 
 additional_points <- data.frame(
   Method = c("30 %", "70 %", "97 %"),
@@ -75,52 +81,66 @@ Corr <- ggplot(blade_metrics_melted, aes(x = Method, y = Value, fill = Metric)) 
 
 
 
-
-
 scatter_plot <- ggplot(data = layer_manual_MOB, aes(x = x, y = y, color = celltypes)) +
   geom_point(aes(colour = celltypes), size = 3) +
   labs(title = "Ground Truth Annotation", color = "Cell Types") +
-  scale_color_manual(values = c("GC" = "lightblue", "M.TC" = "orange", "OSNs" = "red", "PGC" = "#9999FF"))
+  scale_color_manual(values = c("GC" = "lightblue", "M.TC" = "orange", "OSNs" = "red", "PGC" = "#9999FF")) +
+  theme(
+    plot.title = element_text(size = 20),  # Increase title font siz
+    legend.text = element_text(size = 17),  # Increase legend text font size
+    legend.title = element_text(size = 20)  # Increase legend title font size
+  )
+# Modify individual plots with increased title font size
+p1 <- results_BLADE1$plot + theme_minimal() + labs(title = "Baseline, ARI: 0.249") + theme(
+  plot.title = element_text(hjust = 0.5, size = 20),  # Center and increase title font size
+  axis.title = element_blank(),
+  axis.text = element_blank(),
+  axis.ticks = element_blank(),
+  legend.position = "none"
+)
+p2 <- results_30_SP$plot + theme_minimal() + labs(title = "30%, ARI: 0.161",) + theme(
+  plot.title = element_text(hjust = 0.5, size = 20),  # Center and increase title font size
+  axis.title = element_blank(),
+  axis.text = element_blank(),
+  axis.ticks = element_blank(),
+  legend.position = "none"
+)
+p3 <- results_50_SP$plot + theme_minimal() + labs(title = "70%, ARI: 0.266") + theme(
+  plot.title = element_text(hjust = 0.5, size = 20),  # Center and increase title font size
+  axis.title = element_blank(),
+  axis.text = element_blank(),
+  axis.ticks = element_blank(),
+  legend.position = "none"
+)
 
-p1 <- results_BLADE1$plot + theme_minimal() + labs(title = "Baseline") + theme(
-  plot.title = element_text(hjust = 0.5),  # Center the title
+p4 <- results_90_SP$plot + theme_minimal() + labs(title = "97%, ARI: 0.428") + theme(
+  plot.title = element_text(hjust = 0.5, size = 20),  # Center and increase title font size
   axis.title = element_blank(),
   axis.text = element_blank(),
   axis.ticks = element_blank(),
-  legend.position = "none"
-)
-p2 <- results_30_SP$plot + theme_minimal() + labs(title = "30%") + theme(
-  plot.title = element_text(hjust = 0.5),  # Center the title
-  axis.title = element_blank(),
-  axis.text = element_blank(),
-  axis.ticks = element_blank(),
-  legend.position = "none"
-)
-p3 <- results_50_SP$plot + theme_minimal() + labs(title = "70%") + theme(
-  plot.title = element_text(hjust = 0.5),  # Center the title
-  axis.title = element_blank(),
-  axis.text = element_blank(),
-  axis.ticks = element_blank(),
-  legend.position = "none"
-)
-p4 <- results_90_SP$plot + theme_minimal() + labs(title = "97%") + theme(
-  plot.title = element_text(hjust = 0.5),  # Center the title
-  axis.title = element_blank(),
-  axis.text = element_blank(),
-  axis.ticks = element_blank()
+  legend.text = element_text(size = 17),  # Increase legend text size
+  legend.title = element_text(size = 20)  # Increase legend title size
 )
 
+# Combine the individual plots
 combined_plot <- (p1 | p2 | p3 | p4) +
   plot_annotation(
-    title = "Inferred Dominant Cell Types "
+    title = "Inferred Dominant Cell Types",
+    theme = theme(plot.title = element_text(size = 20))  # Increase title font size
   )
+
+scatter_plot + combined_plot 
 
 # Create a label for the combined plot
 combined_plot_labeled <- combined_plot 
+
 # Combine the ARI and Corr plots with the labeled combined plot
 final_plot <- ((ARI | Corr) / combined_plot_labeled) + 
   plot_annotation(tag_levels = 'A') & 
-  theme(plot.tag = element_text(size = 15, face = "bold"))
+  theme(
+    plot.tag = element_text(size = 15, face = "bold"),  # Increase tag size
+    plot.title = element_text(size = 18, face = "bold")  # Increase font size of titles in the combined plot
+  )
 
 # Print the final plot
 print(final_plot)

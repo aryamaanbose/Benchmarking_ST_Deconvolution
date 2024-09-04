@@ -51,11 +51,14 @@ calculate_ari_and_purity <- function(proportions_sim, true_labels_df) {
 ##Calculate PCC accuracy 
 [Spe is the spatial object that needs to be loaded first, run Preprocess_ST.Rmd first]
 ```{r}
+
 spe <- FindVariableFeatures(spe, selection.method = "vst", nfeatures = 2000)
 spe <- ScaleData(spe, features = rownames(spe))
 spe <- RunPCA(spe, features = VariableFeatures(object = spe))
 spe <- FindNeighbors(spe, dims = 1:10)
 spe<- FindClusters(spe,resolution = 0.5)
+
+
 
 de_markers0 <- FindMarkers(spe, ident.1 = 0)
 de_markers1 <- FindMarkers(spe, ident.1 = 1)
@@ -113,8 +116,8 @@ calculate_correlations <- function(spe, marker_genes, proportions) {
     if (cell_type %in% colnames(proportions)) {
       for (gene in marker_genes[[cell_type]]) {
         # Extract gene expression values
-        if (gene %in% rownames(GetAssayData(object = spe, assay = "spatial", slot = "data"))) {
-          gene_expression <- GetAssayData(object = spe, assay = "spatial", slot = "data")[gene, ]
+        if (gene %in% rownames(GetAssayData(object = spe, assay = "spatial", slot = "counts"))) {
+          gene_expression <- GetAssayData(object = spe, assay = "spatial", slot = "counts")[gene, ]
         } else {
           next  # Skip this gene if it's not found
         }
@@ -337,6 +340,22 @@ process_dataset2 <- function(dataset,dataset_name, true_labels_df) {
 
 ```
 
+```{r}
+
+locations <- strsplit(colnames(spe), "x")
+locations <- matrix(unlist(locations), ncol = 2, byrow = TRUE)
+locations <- apply(locations, 2, as.numeric)
+colnames(locations) <- c("x","y")
+
+rownames(locations) <- colnames(spe)
+locations <- as.data.frame(locations)
+
+locations$x <- round(locations$x)
+locations$y <- round(locations$y)
+locations$Location <- rownames(locations)
+
+```
+
 ##Loading Results
 ```{r}
 results_BLADE1 <- process_dataset("deg200.csv", layer_manual_MOB)
@@ -395,6 +414,16 @@ bladesp600 <-  process_dataset("BLADE_sp_600.csv", layer_manual_MOB)
 bladespnorp <-  process_dataset("BLADE_sp_norp.csv", layer_manual_MOB)
 bladespsigdiff <-  process_dataset("BLADE_sp_sigdiff.csv", layer_manual_MOB)
 bladespfc <-  process_dataset("BLADE_sp_fc.csv", layer_manual_MOB)
+
+
+
+
+
+results_card_full <- process_dataset2(card_full, "CARD Full",layer_manual_MOB)
+results_music_full <-  process_dataset2(music_full, "MUSIC Full",layer_manual_MOB)
+
+
+
 
 
 

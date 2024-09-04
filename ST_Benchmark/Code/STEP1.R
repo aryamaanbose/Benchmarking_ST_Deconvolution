@@ -169,45 +169,45 @@ optimal_radii <- calculate_optimal_radius(coords)
 # To analyze diversity and uniformity, you can use these radii values
 summary(optimal_radii)
 
-
-
-######Checking shannon diversity for checking cell type diversity per spot when neighbourhood radius is increased 
-
-calculate_diversity_per_radius <- function(layer_manual_MOB, radii) {
+calculate_diversity_per_neighbors <- function(layer_manual_MOB, radii) {
   # Extract coordinates
   coords <- layer_manual_MOB[, c("x", "y")]
   dist_matrix <- as.matrix(dist(coords))
   
   # List to store diversity values for each radius
-  diversity_values <- data.frame(radius = numeric(), shannon_diversity = numeric())
+  diversity_values <- data.frame(neighbors = numeric(), num_cell_types = numeric())
   
   # Loop over each radius
   for (radius in radii) {
-    # Initialize an empty vector to store diversity indices per spot
-    spot_diversity <- numeric(nrow(coords))
+    # Initialize vectors to store number of neighbors and number of cell types per spot
+    num_neighbors <- numeric(nrow(coords))
+    num_cell_types <- numeric(nrow(coords))
     
-    # Calculate diversity for each spot based on the radius
+    # Calculate number of neighbors and cell types for each spot based on the radius
     for (i in 1:nrow(coords)) {
       # Find neighboring spots within the radius
       neighbors <- which(dist_matrix[i, ] <= radius & dist_matrix[i, ] > 0)
+      
+      # Store the number of neighbors
+      num_neighbors[i] <- length(neighbors)
       
       if (length(neighbors) > 0) {
         # Extract cell types for neighbors
         neighbor_types <- layer_manual_MOB$celltypes[neighbors]
         type_counts <- table(neighbor_types)
         
-        # Calculate Shannon Diversity Index for this neighborhood
-        spot_diversity[i] <- diversity(type_counts, index = "shannon")
+        # Store the number of unique cell types
+        num_cell_types[i] <- length(type_counts)
       } else {
-        # No neighbors means zero diversity
-        spot_diversity[i] = 0
+        # No neighbors means zero cell types
+        num_cell_types[i] <- 0
       }
     }
     
-    # Append the average diversity value for this radius
+    # Append the average number of cell types per spot for this number of neighbors
     diversity_values <- rbind(
       diversity_values,
-      data.frame(radius = radius, shannon_diversity = mean(spot_diversity, na.rm = TRUE))
+      data.frame(neighbors = mean(num_neighbors), num_cell_types = mean(num_cell_types, na.rm = TRUE))
     )
   }
   
@@ -215,21 +215,20 @@ calculate_diversity_per_radius <- function(layer_manual_MOB, radii) {
 }
 
 # Example usage:
-radii <- c(1, 2, 3, 4, 5, 6,7,8,9,10,12,13)  # Adjust as needed
-diversity_results <- calculate_diversity_per_radius(layer_manual_MOB, radii)
+radii <- c(1.69, 2.143, 3.408, 4, 5, 6, 7, 8, 9, 10, 12, 13)  # Adjust as needed
+diversity_results <- calculate_diversity_per_neighbors(layer_manual_MOB, radii)
+
 # Plot the results
-ggplot(diversity_results, aes(x = radius, y = shannon_diversity)) +
+ggplot(diversity_results, aes(x = neighbors, y = num_cell_types)) +
   geom_line() +
   geom_point() +
   labs(
-    title = "Shannon Diversity Index vs. Neighborhood Radius",
-    x = "Neighborhood Radius",
-    y = "Shannon Diversity Index"
+    title = "Average number of cell types in each spot vs. Number of neighbors used to simulated synthetic ST data",
+    x = "Number of Neighbors",
+    y = "Avergae Number of Cell Types per Spot"
   ) +
   theme_minimal()
 
-
-layer_manual_MOB
 
 
 

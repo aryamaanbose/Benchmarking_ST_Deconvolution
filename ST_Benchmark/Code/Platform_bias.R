@@ -49,7 +49,7 @@ bland_altman_plot <- ggplot(merged_exp, aes(x = mean, y = difference)) +
   geom_hline(yintercept = mean_diff, color = "blue", linetype = "dashed") +  # Mean difference line
   geom_hline(yintercept = upper_cutoff, color = "red", linetype = "dashed") + 
   geom_hline(yintercept = lower_cutoff, color = "red", linetype = "dashed") +  # Upper and lower limit lines
-  geom_text(aes(label = label), vjust = 1.5, size = 3, check_overlap = TRUE, na.rm = TRUE) +  # Add labels for significantly different genes only
+  geom_text(aes(label = label), vjust = 1.5, size = 4, check_overlap = TRUE, na.rm = TRUE) +  # Add labels for significantly different genes only
   xlab("Average Log Expression (Spatial and scRNA)") +
   ylab("Difference in Log Expression Log(Spatial/scRNA)") +
   ggtitle("Bland-Altman Plot for Discrepancies in Gene Expression") +
