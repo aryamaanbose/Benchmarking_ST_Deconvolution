@@ -1,7 +1,7 @@
 ### Benchmarking Spatial Transcriptomics Tools Deconvolution Tools that use a Reference scRNA Profile, Using Real and Simulated Data
 
 **Main contact:**
-Aryamaan Bose, a.bose@student.vu.nl
+Aryamaan Bose, aryamaanbose.nl@gmail.com
 
 #### Directories:
 
